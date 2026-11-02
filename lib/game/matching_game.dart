@@ -32,13 +32,24 @@ class MatchingGame {
   bool isEnded = false;
   bool isWon = false;
 
+  /// 看廣告「偷看全部」：每局一次，偷看期間不能翻牌。
+  bool hintUsed = false;
+  bool isPeeking = false;
+
+  /// 看廣告「+15 秒繼續」：每局一次。
+  bool revived = false;
+  static const reviveSeconds = 15;
+
   /// 最近一次配對成功的小吃與得分，給畫面顯示提示。
   Food? lastMatched;
   int lastPoints = 0;
   int lastCombo = 1;
 
   /// 兩張翻錯、等待蓋回去的期間為 true，這段時間不能再翻牌。
-  bool get isLocked => secondPickedIndex != null;
+  bool get isLocked => secondPickedIndex != null || isPeeking;
+
+  bool get canPeek => !hintUsed && !isEnded;
+  bool get canRevive => isEnded && !isWon && !revived;
 
   int get matchedPairs => isMatched.where((m) => m).length ~/ 2;
   int get pairsLeft => level.pairs - matchedPairs;
@@ -68,6 +79,9 @@ class MatchingGame {
     timeBonus = 0;
     isEnded = false;
     isWon = false;
+    hintUsed = false;
+    isPeeking = false;
+    revived = false;
     lastMatched = null;
     lastPoints = 0;
     lastCombo = 1;
@@ -119,6 +133,30 @@ class MatchingGame {
     isOpen[second] = false;
     firstPickedIndex = null;
     secondPickedIndex = null;
+  }
+
+  /// 開始偷看：先把翻錯等待中的牌蓋回去，再讓畫面顯示全部牌面。
+  bool startPeek() {
+    if (!canPeek) return false;
+    hideMismatched();
+    hintUsed = true;
+    isPeeking = true;
+    return true;
+  }
+
+  void endPeek() => isPeeking = false;
+
+  /// 畫面要不要顯示這張牌的正面。
+  bool isFaceUp(int index) => isPeeking || isOpen[index];
+
+  /// 時間到之後看廣告，多給 15 秒繼續。
+  bool revive() {
+    if (!canRevive) return false;
+    revived = true;
+    isEnded = false;
+    timeLeft = reviveSeconds;
+    hideMismatched();
+    return true;
   }
 
   /// 每秒呼叫一次。時間到回傳 true。

@@ -1,14 +1,27 @@
 import 'package:flutter/material.dart';
 
 import 'screens/game_screen.dart';
+import 'services/ad_service.dart';
+import 'services/progress_store.dart';
+import 'services/sound_service.dart';
 import 'theme.dart';
 
-void main() {
-  runApp(const NightMarketMatchApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final store = await ProgressStore.load();
+  final ads = AdMobService();
+  ads.init(); // 不等廣告載入完，先讓遊戲畫面出來
+  final sounds = AudioSoundService(muted: store.muted);
+  sounds.init();
+  runApp(NightMarketMatchApp(store: store, ads: ads, sounds: sounds));
 }
 
 class NightMarketMatchApp extends StatelessWidget {
-  const NightMarketMatchApp({super.key});
+  const NightMarketMatchApp({super.key, required this.store, required this.ads, required this.sounds});
+
+  final ProgressStore store;
+  final AdService ads;
+  final SoundService sounds;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +37,7 @@ class NightMarketMatchApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const GameScreen(),
+      home: GameScreen(store: store, ads: ads, sounds: sounds),
     );
   }
 }
