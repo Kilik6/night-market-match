@@ -1,44 +1,78 @@
 import 'dart:math';
 
-/// 翻牌遊戲的純邏輯，不含任何畫面，方便寫單元測試。
-/// 對應 React Native 版 App.tsx 裡的 state 與 cardPressHandler / calculateGameResult。
+import 'night_market_data.dart';
+
+/// 一局夜市翻牌的純邏輯，不含任何畫面，方便寫單元測試。
 class MatchingGame {
-  MatchingGame({List<String>? symbols, Random? random})
-      : symbols = symbols ?? defaultSymbols,
+  MatchingGame({required this.level, List<Food> pool = foods, Random? random})
+      : _pool = pool,
         _random = random ?? Random() {
     reset();
   }
 
-  static const defaultSymbols = ['😡', '😛', '😍', '🥶', '😈', '💀', '🐥', '🍎'];
+  static const pointsPerMatch = 100;
+  static const maxCombo = 5;
+  static const bonusPerSecond = 10;
 
-  final List<String> symbols;
+  final Level level;
+  final List<Food> _pool;
   final Random _random;
 
-  /// 洗好的牌（每個符號兩張）。
-  late List<String> cards;
-
-  /// 每張牌是否翻開。
+  late List<Food> cards;
   late List<bool> isOpen;
+  late List<bool> isMatched;
 
   int? firstPickedIndex;
   int? secondPickedIndex;
   int steps = 0;
+  int score = 0;
+  int combo = 1;
+  int timeLeft = 0;
+  int timeBonus = 0;
   bool isEnded = false;
+  bool isWon = false;
+
+  /// 最近一次配對成功的小吃與得分，給畫面顯示提示。
+  Food? lastMatched;
+  int lastPoints = 0;
+  int lastCombo = 1;
 
   /// 兩張翻錯、等待蓋回去的期間為 true，這段時間不能再翻牌。
-  /// （修正 RN 版：等待期間點牌，牌不會翻開但步數照樣增加）
   bool get isLocked => secondPickedIndex != null;
 
+  int get matchedPairs => isMatched.where((m) => m).length ~/ 2;
+  int get pairsLeft => level.pairs - matchedPairs;
+
+  /// 過關星數：剩餘時間超過一半 3 星、超過 1/4 兩星，其餘 1 星。
+  int get stars {
+    if (!isWon) return 0;
+    final ratio = timeLeft / level.seconds;
+    if (ratio > 0.5) return 3;
+    if (ratio > 0.25) return 2;
+    return 1;
+  }
+
+  int get coinsEarned => isWon ? (score / 10).round() : 0;
+
   void reset() {
-    cards = [...symbols, ...symbols]..shuffle(_random);
+    final picks = (_pool.toList()..shuffle(_random)).take(level.pairs).toList();
+    cards = [...picks, ...picks]..shuffle(_random);
     isOpen = List.filled(cards.length, false);
+    isMatched = List.filled(cards.length, false);
     firstPickedIndex = null;
     secondPickedIndex = null;
     steps = 0;
+    score = 0;
+    combo = 1;
+    timeLeft = level.seconds;
+    timeBonus = 0;
     isEnded = false;
+    isWon = false;
+    lastMatched = null;
+    lastPoints = 0;
+    lastCombo = 1;
   }
 
-  /// 翻開一張牌。回傳結果讓畫面決定要不要延遲蓋牌。
   PickResult pick(int index) {
     if (isEnded || isLocked || isOpen[index]) return PickResult.ignored;
 
@@ -52,16 +86,31 @@ class MatchingGame {
     }
 
     if (cards[first] == cards[index]) {
+      isMatched[first] = true;
+      isMatched[index] = true;
       firstPickedIndex = null;
-      if (isOpen.every((open) => open)) isEnded = true;
-      return isEnded ? PickResult.finished : PickResult.matched;
+      lastMatched = cards[index];
+      lastCombo = combo;
+      lastPoints = pointsPerMatch * combo;
+      score += lastPoints;
+      combo = min(combo + 1, maxCombo);
+
+      if (pairsLeft == 0) {
+        isEnded = true;
+        isWon = true;
+        timeBonus = timeLeft * bonusPerSecond;
+        score += timeBonus;
+        return PickResult.finished;
+      }
+      return PickResult.matched;
     }
 
     secondPickedIndex = index;
+    combo = 1;
     return PickResult.mismatched;
   }
 
-  /// 翻錯後把兩張牌蓋回去（畫面會在 1 秒後呼叫）。
+  /// 翻錯後把兩張牌蓋回去（畫面會在延遲後呼叫）。
   void hideMismatched() {
     final first = firstPickedIndex;
     final second = secondPickedIndex;
@@ -70,6 +119,17 @@ class MatchingGame {
     isOpen[second] = false;
     firstPickedIndex = null;
     secondPickedIndex = null;
+  }
+
+  /// 每秒呼叫一次。時間到回傳 true。
+  bool tick() {
+    if (isEnded) return false;
+    timeLeft = max(0, timeLeft - 1);
+    if (timeLeft == 0) {
+      isEnded = true;
+      return true;
+    }
+    return false;
   }
 }
 

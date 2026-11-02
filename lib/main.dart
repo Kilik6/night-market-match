@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'screens/game_screen.dart';
+import 'theme.dart';
 
-/// 程式進入點，對應 React Native 版的 index.js（AppRegistry.registerComponent）。
 void main() {
   runApp(const NightMarketMatchApp());
 }
@@ -13,9 +13,17 @@ class NightMarketMatchApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FC Matching Game',
+      title: '夜市翻牌',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: NightColors.night,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: NightColors.lantern,
+          brightness: Brightness.dark,
+        ),
+      ),
       home: const GameScreen(),
     );
   }
