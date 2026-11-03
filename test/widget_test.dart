@@ -2,9 +2,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_market_match/game/card_skins.dart';
 import 'package:night_market_match/game/matching_game.dart';
 import 'package:night_market_match/game/night_market_data.dart';
 import 'package:night_market_match/screens/game_screen.dart';
+import 'package:night_market_match/screens/home_screen.dart';
 import 'package:night_market_match/services/ad_service.dart';
 import 'package:night_market_match/services/progress_store.dart';
 import 'package:night_market_match/services/sound_service.dart';
@@ -51,6 +53,18 @@ class FakeSoundService implements SoundService {
   void play(Sfx sfx) {
     if (!muted) played.add(sfx);
   }
+
+  @override
+  bool musicOn = true;
+
+  /// 背景音樂的暫停／恢復紀錄。
+  final musicEvents = <String>[];
+
+  @override
+  void pauseMusic() => musicEvents.add('pause');
+
+  @override
+  void resumeMusic() => musicEvents.add('resume');
 }
 
 void main() {
@@ -183,47 +197,160 @@ void main() {
     });
   });
 
-  group('GameScreen', () {
-    late FakeAdService ads;
-    late FakeSoundService sounds;
-
-    Future<ProgressStore> pumpGame(WidgetTester tester, [Map<String, Object> saved = const {}]) async {
-      tester.view.physicalSize = const Size(1179, 2556);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
-      SharedPreferences.setMockInitialValues(saved);
-      final store = await ProgressStore.load();
-      ads = FakeAdService();
-      sounds = FakeSoundService()..muted = store.muted;
-      await tester.pumpWidget(
-          MaterialApp(home: GameScreen(store: store, ads: ads, sounds: sounds, random: Random(1))));
-      return store;
-    }
-
-    /// 用同樣的種子重建遊戲，得知牌的排列。
-    MatchingGame mirror(int level) => MatchingGame(level: levels[level], random: Random(1));
-
-    Future<void> solveOnScreen(WidgetTester tester, int level) async {
-      final g = mirror(level);
-      for (var i = 0; i < g.cards.length; i++) {
-        if (g.isMatched[i]) continue;
-        final j = pairOf(g, i);
-        g.pick(i);
-        g.pick(j);
-        await tester.tap(find.byKey(ValueKey('card_$i')));
-        await tester.tap(find.byKey(ValueKey('card_$j')));
-        await tester.pump();
+  group('內容資料', () {
+    test('18 攤夜市，難度遞增，小吃種類夠最大的一攤用', () {
+      expect(levels.length, 18);
+      expect(levels.map((l) => l.name).toSet().length, 18);
+      // 最多 24 張牌，小螢幕也放得下
+      expect(levels.every((l) => l.pairs <= 12), isTrue);
+      // 最後一攤的時間最緊（平均每組可用秒數最少）
+      double perPair(Level l) => l.seconds / l.pairs;
+      expect(levels.map(perPair).reduce(min), perPair(levels.last));
+      final maxPairs = levels.map((l) => l.pairs).reduce(max);
+      expect(foods.length, greaterThanOrEqualTo(maxPairs));
+      expect(foods.map((f) => f.name).toSet().length, foods.length);
+      expect(foods.map((f) => f.emoji).toSet().length, foods.length);
+      for (var i = 1; i < levels.length; i++) {
+        final prev = levels[i - 1], cur = levels[i];
+        // 牌更多，或牌一樣多但時間更少
+        expect(cur.pairs > prev.pairs || cur.seconds < prev.seconds, isTrue, reason: cur.name);
       }
-      await tester.pump(const Duration(milliseconds: 800));
-      await tester.pump(const Duration(milliseconds: 300));
-    }
+    });
 
-    testWidgets('開局：逢甲夜市 12 張蓋著的牌，其他夜市上鎖', (tester) async {
+    test('卡背 id 不重複，預設卡背免費', () {
+      expect(cardSkins.map((s) => s.id).toSet().length, cardSkins.length);
+      expect(skinById(defaultSkinId).price, 0);
+      expect(skinById('不存在').id, defaultSkinId);
+    });
+  });
+
+  group('ProgressStore', () {
+    test('買卡背：金幣不夠買不了，買了會扣金幣並可換上', () async {
+      SharedPreferences.setMockInitialValues({'coins': 400});
+      final store = await ProgressStore.load();
+      final starry = skinById('starry'); // 500
+      final fortune = skinById('fortune'); // 300
+      expect(await store.buySkin(starry), isFalse);
+      expect(store.coins, 400);
+
+      expect(await store.buySkin(fortune), isTrue);
+      expect(store.coins, 100);
+      expect(store.ownedSkins, {defaultSkinId, 'fortune'});
+      expect(await store.buySkin(fortune), isFalse); // 不能重複買
+
+      expect(store.equippedSkin, defaultSkinId);
+      await store.equipSkin('fortune');
+      expect(store.equippedSkin, 'fortune');
+      await store.equipSkin('starry'); // 沒買的不能換
+      expect(store.equippedSkin, 'fortune');
+    });
+
+    test('最佳星數只會往上更新', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await ProgressStore.load();
+      expect(store.bestStars(2), 0);
+      expect(await store.recordStars(2, 2), isTrue);
+      expect(await store.recordStars(2, 1), isFalse);
+      expect(store.bestStars(2), 2);
+      expect(await store.recordStars(2, 3), isTrue);
+      expect(store.bestStars(2), 3);
+    });
+
+    test('重置進度：清掉金幣、解鎖、星數、卡背，保留聲音設定和移除廣告', () async {
+      SharedPreferences.setMockInitialValues({
+        'coins': 900,
+        'unlocked': 4,
+        'clears': 7,
+        'stars_0': 3,
+        'stars_2': 1,
+        'owned_skins': ['fortune'],
+        'equipped_skin': 'fortune',
+        'muted': true,
+        'music_on': false,
+        'ads_removed': true,
+      });
+      final store = await ProgressStore.load();
+      await store.resetProgress();
+      expect(store.coins, 0);
+      expect(store.unlocked, 1);
+      expect(store.clears, 0);
+      expect(store.bestStars(0), 0);
+      expect(store.bestStars(2), 0);
+      expect(store.ownedSkins, {defaultSkinId});
+      expect(store.equippedSkin, defaultSkinId);
+      expect(store.muted, isTrue);
+      expect(store.musicOn, isFalse);
+      expect(store.adsRemoved, isTrue);
+    });
+  });
+
+  late FakeAdService ads;
+  late FakeSoundService sounds;
+  late ProgressStore store;
+
+  Future<void> setUpStore(WidgetTester tester, Map<String, Object> saved) async {
+    tester.view.physicalSize = const Size(1179, 2556);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues(saved);
+    store = await ProgressStore.load();
+    ads = FakeAdService();
+    sounds = FakeSoundService()
+      ..muted = store.muted
+      ..musicOn = store.musicOn;
+  }
+
+  /// 直接打開某一攤的遊戲畫面。
+  Future<void> pumpGame(WidgetTester tester, {Map<String, Object> saved = const {}, int level = 0}) async {
+    await setUpStore(tester, saved);
+    await tester.pumpWidget(MaterialApp(
+      home: GameScreen(levelIndex: level, store: store, ads: ads, sounds: sounds, random: Random(1)),
+    ));
+  }
+
+  /// 從首頁開始。
+  Future<void> pumpHome(WidgetTester tester, {Map<String, Object> saved = const {}}) async {
+    await setUpStore(tester, saved);
+    await tester.pumpWidget(MaterialApp(
+      home: HomeScreen(store: store, ads: ads, sounds: sounds, random: Random(1)),
+    ));
+  }
+
+  /// 等換頁動畫跑完。畫面上有燈籠動畫，所以不能用 pumpAndSettle。
+  Future<void> settle(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+  }
+
+  Future<void> tapAndSettle(WidgetTester tester, Finder finder) async {
+    await tester.tap(finder);
+    await settle(tester);
+  }
+
+  /// 用同樣的種子重建遊戲，得知牌的排列。
+  MatchingGame mirror(int level) => MatchingGame(level: levels[level], random: Random(1));
+
+  Future<void> solveOnScreen(WidgetTester tester, int level) async {
+    final g = mirror(level);
+    for (var i = 0; i < g.cards.length; i++) {
+      if (g.isMatched[i]) continue;
+      final j = pairOf(g, i);
+      g.pick(i);
+      g.pick(j);
+      await tester.tap(find.byKey(ValueKey('card_$i')));
+      await tester.tap(find.byKey(ValueKey('card_$j')));
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  group('GameScreen', () {
+    testWidgets('開局：逢甲夜市 12 張蓋著的牌', (tester) async {
       await pumpGame(tester);
-      expect(find.text('第 1 攤・逢甲夜市'), findsOneWidget);
+      expect(find.text('逢甲夜市'), findsOneWidget);
+      expect(find.text('第 1 攤・台中'), findsOneWidget);
       expect(find.text('夜'), findsNWidgets(12));
-      expect(find.text('🔒 士林夜市'), findsOneWidget);
-      expect(find.text('🔒 六合夜市'), findsOneWidget);
     });
 
     testWidgets('翻錯 0.7 秒後蓋回，時間每秒倒數', (tester) async {
@@ -242,64 +369,56 @@ void main() {
       expect(find.text('59'), findsOneWidget);
     });
 
-    testWidgets('過關：金幣和解鎖寫進存檔，下次打開從新的一攤開始', (tester) async {
-      final store = await pumpGame(tester);
+    testWidgets('過關：金幣、解鎖、星數寫進存檔，可以直接前往下一攤', (tester) async {
+      await pumpGame(tester);
       await solveOnScreen(tester, 0);
       expect(find.text('收攤！逢甲夜市完成'), findsOneWidget);
       expect(find.text('★★★'), findsOneWidget);
 
       await tester.tap(find.text('前往下一攤：士林夜市'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('第 2 攤・士林夜市'), findsOneWidget);
+      await settle(tester);
+      expect(find.text('士林夜市'), findsOneWidget);
       expect(find.text('🪙 260'), findsOneWidget); // (2000 + 60 秒 × 10) / 10
       expect(find.text('夜'), findsNWidgets(16));
       expect(store.coins, 260);
       expect(store.unlocked, 2);
       expect(store.clears, 1);
+      expect(store.bestStars(0), 3);
       expect(ads.rewardedShown, 0);
-
-      // 模擬重新打開 App：讀同一份存檔
-      await tester.pumpWidget(const SizedBox());
-      final reopened = await ProgressStore.load();
-      await tester.pumpWidget(MaterialApp(home: GameScreen(store: reopened, ads: ads, sounds: sounds, random: Random(1))));
-      expect(find.text('第 2 攤・士林夜市'), findsOneWidget);
-      expect(find.text('🪙 260'), findsOneWidget);
-      expect(find.text('🔒 士林夜市'), findsNothing);
     });
 
     testWidgets('過關看廣告，金幣 ×2', (tester) async {
-      final store = await pumpGame(tester);
+      await pumpGame(tester);
       await solveOnScreen(tester, 0);
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await settle(tester);
       expect(ads.rewardedShown, 1);
       expect(store.coins, 520);
       expect(find.text('🪙 520'), findsOneWidget);
     });
 
     testWidgets('第 3 次過關播插頁式廣告；看過獎勵型廣告的那次不播', (tester) async {
-      await pumpGame(tester, {'clears': 2});
+      await pumpGame(tester, saved: {'clears': 2});
       await solveOnScreen(tester, 0);
       await tester.tap(find.text('前往下一攤：士林夜市'));
       await tester.pump();
       expect(ads.interstitialShown, 1);
 
       await tester.pumpWidget(const SizedBox()); // 清掉畫面，重新開一局
-      await pumpGame(tester, {'clears': 2});
+      await pumpGame(tester, saved: {'clears': 2});
       await solveOnScreen(tester, 0);
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
       await tester.pump();
       expect(ads.interstitialShown, 0);
     });
 
-    testWidgets('看廣告偷看全部 2 秒，每局只能一次', (tester) async {
+    testWidgets('看廣告偷看全部 2 秒，每局只能一次；播廣告時暫停音樂', (tester) async {
       await pumpGame(tester);
       await tester.tap(find.byKey(const ValueKey('peek')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(ads.rewardedShown, 1);
+      expect(sounds.musicEvents, ['pause', 'resume']);
       expect(find.text('夜'), findsNothing);
 
       await tester.pump(const Duration(seconds: 2));
@@ -361,21 +480,146 @@ void main() {
       expect(sounds.played.last, Sfx.coin);
     });
 
-    testWidgets('靜音按鈕：關掉後不播音效，並記在存檔裡', (tester) async {
-      final store = await pumpGame(tester);
-      await tester.tap(find.byKey(const ValueKey('mute')));
+    testWidgets('最難的羅東夜市 24 張牌也能完整顯示', (tester) async {
+      await pumpGame(tester, level: 5);
+      expect(find.text('羅東夜市'), findsOneWidget);
+      expect(find.text('夜'), findsNWidgets(24));
+      for (var i = 0; i < 24; i++) {
+        expect(tester.getRect(find.byKey(ValueKey('card_$i'))).bottom, lessThan(2556 / 3));
+      }
+    });
+
+    testWidgets('買了卡背後，牌桌用新卡背', (tester) async {
+      await pumpGame(tester, saved: {
+        'owned_skins': ['fortune'],
+        'equipped_skin': 'fortune',
+      });
+      expect(find.text('福'), findsNWidgets(12));
+      expect(find.text('夜'), findsNothing);
+    });
+  });
+
+  group('畫面流程', () {
+    testWidgets('首頁：開始遊戲進到最新解鎖的一攤，並顯示總星數和金幣', (tester) async {
+      await pumpHome(tester, saved: {'unlocked': 2, 'coins': 123, 'stars_0': 3});
+      expect(find.text('夜市翻牌'), findsOneWidget);
+      expect(find.text('第 2 攤・士林夜市'), findsOneWidget);
+      expect(find.text('★ 3 / 54'), findsOneWidget);
+      expect(find.text('🪙 123'), findsOneWidget);
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('start')));
+      expect(find.text('士林夜市'), findsOneWidget);
+      expect(find.text('夜'), findsNWidgets(16));
+    });
+
+    testWidgets('遊戲中按返回會先確認；選繼續玩就留下，選離開就回首頁', (tester) async {
+      await pumpHome(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('start')));
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('back')));
+      expect(find.text('離開這一攤？'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3)); // 確認視窗開著時不倒數
+      await tapAndSettle(tester, find.text('繼續玩'));
+      expect(find.text('逢甲夜市'), findsOneWidget);
+      final time = int.parse(tester.widget<Text>(find.byKey(const ValueKey('time'))).data!);
+      expect(time, greaterThanOrEqualTo(58));
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('back')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('confirm_leave')));
+      expect(find.byKey(const ValueKey('start')), findsOneWidget);
+    });
+
+    testWidgets('選擇夜市：上鎖的會提示，過關後回列表星數和解鎖會更新', (tester) async {
+      await pumpHome(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('levels')));
+      expect(find.text('選擇夜市'), findsOneWidget);
+      expect(find.text('逢甲夜市・台中'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('level_1')));
+      await tester.pump();
+      expect(find.text('先通過「逢甲夜市」才能解鎖'), findsOneWidget);
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('level_0')));
+      await solveOnScreen(tester, 0);
+      await tapAndSettle(tester, find.byKey(const ValueKey('dialog_leave')));
+      expect(find.text('選擇夜市'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('level_stars_0'))).data, '★★★');
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('level_1')));
+      expect(find.text('士林夜市'), findsOneWidget);
+    });
+
+    testWidgets('卡背商店：金幣不夠會提示，買了就換上，首頁顯示目前卡背', (tester) async {
+      await pumpHome(tester, saved: {'coins': 400});
+      await tapAndSettle(tester, find.byKey(const ValueKey('shop')));
+      expect(find.text('卡背商店'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('skin_starry'))); // 500，不夠
+      await tester.pump();
+      expect(find.text('金幣不夠，還差 🪙 100'), findsOneWidget);
+      expect(store.coins, 400);
+
+      await tester.tap(find.byKey(const ValueKey('skin_fortune'))); // 300
+      await tester.pump();
+      expect(store.coins, 100);
+      expect(store.equippedSkin, 'fortune');
+      expect(sounds.played.last, Sfx.coin);
+
+      await tester.pageBack();
+      await settle(tester);
+      expect(find.text('目前使用：招財金'), findsOneWidget);
+      expect(find.text('🪙 100'), findsOneWidget);
+    });
+
+    testWidgets('設定：音樂和音效開關會存檔', (tester) async {
+      await pumpHome(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('settings')));
+
+      await tester.tap(find.byKey(const ValueKey('music_switch')));
+      await tester.pump();
+      expect(store.musicOn, isFalse);
+      expect(sounds.musicOn, isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('sfx_switch')));
       await tester.pump();
       expect(store.muted, isTrue);
-      expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
+      expect(sounds.muted, isTrue);
+    });
 
-      await tester.tap(find.byKey(const ValueKey('card_0')));
-      await tester.pump();
-      expect(sounds.played, isEmpty);
+    testWidgets('設定：重置進度要先確認，取消就不會清掉', (tester) async {
+      await pumpHome(tester, saved: {'coins': 500, 'unlocked': 3});
+      await tapAndSettle(tester, find.byKey(const ValueKey('settings')));
 
-      await tester.tap(find.byKey(const ValueKey('mute')));
-      await tester.pump();
-      expect(store.muted, isFalse);
-      expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
+      await tapAndSettle(tester, find.byKey(const ValueKey('reset')));
+      await tapAndSettle(tester, find.text('取消'));
+      expect(store.coins, 500);
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('reset')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('confirm_reset')));
+      expect(store.coins, 0);
+      expect(store.unlocked, 1);
+      expect(find.text('已重置遊戲進度'), findsOneWidget);
+
+      await tester.pageBack();
+      await settle(tester);
+      expect(find.text('第 1 攤・逢甲夜市'), findsOneWidget);
+      expect(find.text('🪙 0'), findsOneWidget);
+    });
+  
+    testWidgets('選擇夜市：18 攤可以捲動，打開時會捲到最新解鎖的那一攤', (tester) async {
+      await pumpHome(tester, saved: {'unlocked': 15});
+      await tapAndSettle(tester, find.byKey(const ValueKey('levels')));
+      expect(find.text('大東夜市・台南'), findsOneWidget); // 第 15 攤在畫面內
+      await tapAndSettle(tester, find.byKey(const ValueKey('level_14')));
+      expect(find.text('大東夜市'), findsOneWidget);
+    });
+
+    testWidgets('最後一攤南機場夜市過關，顯示逛完所有夜市', (tester) async {
+      await pumpGame(tester, saved: {'unlocked': 18}, level: 17);
+      expect(find.text('南機場夜市'), findsOneWidget);
+      await solveOnScreen(tester, 17);
+      expect(find.text('恭喜逛完所有夜市！'), findsOneWidget);
+      expect(find.text('再玩一次'), findsOneWidget);
     });
   });
 }

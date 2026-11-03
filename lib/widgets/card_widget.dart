@@ -2,10 +2,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../game/card_skins.dart';
 import '../game/night_market_data.dart';
 import '../theme.dart';
 
-/// 單張夜市卡片：紅色卡背寫「夜」，翻開是小吃 emoji 和名稱，有 3D 翻牌動畫。
+/// 單張夜市卡片：卡背依造型（預設紅色寫「夜」），翻開是小吃 emoji 和名稱，有 3D 翻牌動畫。
 class CardWidget extends StatelessWidget {
   const CardWidget({
     super.key,
@@ -14,6 +15,7 @@ class CardWidget extends StatelessWidget {
     required this.isMatched,
     required this.onTap,
     required this.width,
+    this.skin,
   });
 
   final Food food;
@@ -21,6 +23,8 @@ class CardWidget extends StatelessWidget {
   final bool isMatched;
   final VoidCallback onTap;
   final double width;
+  /// 沒指定就用預設的紅燈籠。
+  final CardSkin? skin;
 
   @override
   Widget build(BuildContext context) {
@@ -55,31 +59,7 @@ class CardWidget extends StatelessWidget {
     );
   }
 
-  Widget _back() {
-    return Container(
-      decoration: BoxDecoration(
-        color: NightColors.lantern,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFF2735F), width: 2),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: NightColors.paper.withValues(alpha: 0.5)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          '夜',
-          style: TextStyle(
-            fontSize: width * 0.32,
-            fontWeight: FontWeight.w700,
-            color: NightColors.paper.withValues(alpha: 0.9),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _back() => CardBack(skin: skin ?? cardSkins.first, width: width);
 
   Widget _front() {
     return Container(
@@ -105,6 +85,41 @@ class CardWidget extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 卡背，也用在商店的預覽。
+class CardBack extends StatelessWidget {
+  const CardBack({super.key, required this.skin, required this.width});
+
+  final CardSkin skin;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: skin.base,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: skin.edge, width: 2),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: skin.markColor.withValues(alpha: 0.5)),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          skin.mark,
+          style: TextStyle(
+            fontSize: width * 0.32,
+            fontWeight: FontWeight.w700,
+            color: skin.markColor.withValues(alpha: 0.9),
+          ),
+        ),
       ),
     );
   }
