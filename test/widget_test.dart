@@ -344,8 +344,9 @@ void main() {
       for (final food in foods.where((f) => f.image != null)) {
         expect(File(food.image!).existsSync(), isTrue, reason: food.name);
       }
-      expect(foods.firstWhere((f) => f.name == '小籠包').image, isNotNull);
-      expect(foods.firstWhere((f) => f.name == '木瓜牛奶').image, isNotNull);
+      for (final name in ['小籠包', '木瓜牛奶', '蚵仔煎', '黑輪', '飯糰', '雞蛋糕', '大腸包小腸', '牛肉麵']) {
+        expect(foods.firstWhere((f) => f.name == name).image, isNotNull, reason: name);
+      }
     });
 
     test('20 種小吃都有介紹；成就的卡背獎勵都存在，id 不重複', () {
