@@ -9,6 +9,7 @@ import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
+import '../widgets/food_icon.dart';
 import '../widgets/lanterns.dart';
 import '../widgets/night_scaffold.dart';
 import 'achievements_screen.dart';
@@ -230,7 +231,7 @@ class _Hero extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('🧋', style: TextStyle(fontSize: cardW * 0.42)),
+                        FoodIcon(food: foods[1], size: cardW * 0.42),
                         Text(
                           '珍珠奶茶',
                           style: TextStyle(

@@ -18,8 +18,8 @@ class FoodIcon extends StatelessWidget {
     return Image.asset(
       image,
       key: ValueKey(image),
-      width: size * 1.45,
-      height: size * 1.45,
+      width: size * 1.75,
+      height: size * 1.75,
       fit: BoxFit.contain,
       gaplessPlayback: true,
       semanticLabel: food.name,

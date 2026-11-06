@@ -340,13 +340,12 @@ void main() {
       expect(skinById('不存在').id, defaultSkinId);
     });
 
-    test('小吃的專屬圖片檔案都存在，小籠包和木瓜牛奶用專屬圖片', () {
+    test('20 種小吃都有專屬圖片，檔案都存在', () {
       for (final food in foods.where((f) => f.image != null)) {
         expect(File(food.image!).existsSync(), isTrue, reason: food.name);
       }
-      for (final name in ['小籠包', '木瓜牛奶', '蚵仔煎', '黑輪', '飯糰', '雞蛋糕', '大腸包小腸', '牛肉麵']) {
-        expect(foods.firstWhere((f) => f.name == name).image, isNotNull, reason: name);
-      }
+      expect(foods.every((f) => f.image != null), isTrue);
+      expect(foods.map((f) => f.image).toSet().length, foods.length);
     });
 
     test('20 種小吃都有介紹；成就的卡背獎勵都存在，id 不重複', () {
@@ -844,18 +843,14 @@ void main() {
       expect(find.byType(MatchBurst), findsNothing);
     });
 
-    testWidgets('有專屬圖片的小吃，翻開時顯示圖片而不是 emoji', (tester) async {
+    testWidgets('小吃翻開時顯示專屬圖片而不是 emoji', (tester) async {
       await pumpGame(tester);
       final g = mirror(0);
-      final index = List.generate(g.cards.length, (i) => i).firstWhere((i) => g.cards[i].image != null, orElse: () => -1);
-      // 這個種子的第一關不一定抽到，抽到才檢查
-      if (index >= 0) {
-        await tester.tap(find.byKey(ValueKey('card_$index')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-        expect(find.byKey(ValueKey(g.cards[index].image!)), findsWidgets);
-        expect(find.text(g.cards[index].emoji), findsNothing);
-      }
+      await tester.tap(find.byKey(const ValueKey('card_0')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(ValueKey(g.cards[0].image!)), findsWidgets);
+      expect(find.text(g.cards[0].emoji), findsNothing);
     });
 
     testWidgets('買了卡背後，牌桌用新卡背', (tester) async {
