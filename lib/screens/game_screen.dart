@@ -3,7 +3,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../game/achievements.dart';
 import '../game/card_skins.dart';
+import '../game/items.dart';
 import '../game/matching_game.dart';
 import '../game/night_market_data.dart';
 import '../services/ad_service.dart';
@@ -11,6 +13,7 @@ import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
+import '../widgets/match_effects.dart';
 import '../widgets/night_scaffold.dart';
 
 /// 闖關畫面：招牌（返回鍵、夜市名稱、金幣）、時間／分數／連擊、牌桌、廣告按鈕。
@@ -39,6 +42,18 @@ class GameScreen extends StatefulWidget {
 
 enum _Choice { primary, watchAd, leave }
 
+/// 一個進行中的配對特效。
+class _Burst {
+  _Burst({required this.card, required this.intensity, required this.seed, this.label, this.sublabel});
+
+  /// 特效出現在哪一張牌上。
+  final int card;
+  final int intensity;
+  final int seed;
+  final String? label;
+  final String? sublabel;
+}
+
 class _GameScreenState extends State<GameScreen> {
   /// 每過幾關播一次插頁式廣告。
   static const interstitialEvery = 3;
@@ -49,6 +64,13 @@ class _GameScreenState extends State<GameScreen> {
   Timer? _clock;
   Timer? _hideTimer;
   Timer? _peekTimer;
+
+  /// 畫面上進行中的配對特效。
+  final List<_Burst> _bursts = [];
+  int _burstCount = 0;
+
+  /// 這一局開始前已達成的成就，用來判斷這局新達成了哪些。
+  Set<String> _achievedAtStart = {};
 
   /// 播廣告、問要不要離開時暫停倒數。
   bool _paused = false;
@@ -79,7 +101,15 @@ class _GameScreenState extends State<GameScreen> {
     _cancelTimers();
     _paused = false;
     _levelIndex = index;
-    _game = MatchingGame(level: levels[index], random: widget.random);
+    _bursts.clear();
+    _game = MatchingGame(
+      level: levels[index],
+      random: widget.random,
+      bonusSeconds: GearEffects.bonusSeconds(_store.gearLevel(GearType.hat)),
+      comboCap: GearEffects.comboCap(_store.gearLevel(GearType.cart)),
+      coinMultiplier: GearEffects.coinMultiplier(_store.gearLevel(GearType.abacus)),
+    );
+    _achievedAtStart = {for (final a in achievements) if (_store.isAchieved(a)) a.id};
     _message = '翻兩張一樣的小吃就能配對';
     _startClock();
   }
@@ -168,38 +198,126 @@ class _GameScreenState extends State<GameScreen> {
   void _onCardTap(int index) {
     if (_paused) return;
     final result = _game.pick(index);
-    if (result == PickResult.ignored) return;
-    _sounds.play(switch (result) {
-      PickResult.matched => _game.lastCombo >= 3 ? Sfx.combo : Sfx.match,
-      PickResult.finished => Sfx.win,
-      PickResult.mismatched => Sfx.miss,
-      _ => Sfx.flip,
-    });
+    switch (result) {
+      case PickResult.ignored:
+        return;
+      case PickResult.firstPicked:
+        _sounds.play(Sfx.flip);
+        setState(() {});
+      case PickResult.mismatched:
+        _sounds.play(Sfx.miss);
+        final saved = _game.combo > 1 && !_game.charmActive && _game.usedItems.contains(ItemType.charm);
+        setState(() => _message = saved ? '護身符保住了連擊！' : '不一樣，連擊中斷');
+        _hideTimer = Timer(const Duration(milliseconds: 700), () {
+          if (mounted) setState(_game.hideMismatched);
+        });
+      case PickResult.matched:
+      case PickResult.finished:
+        _onMatched();
+    }
+  }
 
+  /// 配對成功（翻牌或放大鏡）：音效、提示、圖鑑紀錄，全部配完就過關。
+  void _onMatched() {
+    final food = _game.lastMatched!;
+    _addBursts();
+    final isNew = !_store.discoveredFoods.contains(food.name);
+    _store.recordMatch(food, _game.lastCombo);
+    _sounds.play(_game.isWon ? Sfx.win : (_game.lastCombo >= 3 ? Sfx.combo : Sfx.match));
     setState(() {
-      switch (result) {
-        case PickResult.matched:
-        case PickResult.finished:
-          final name = _game.lastMatched!.name;
-          _message = _game.lastCombo > 1
-              ? '$name！${_game.lastCombo} 連擊 +${_game.lastPoints}'
-              : '$name，配對成功 +${_game.lastPoints}';
-        case PickResult.mismatched:
-          _message = '不一樣，連擊中斷';
-        default:
-          break;
-      }
+      final head = _game.lastCombo > 1
+          ? '${food.name}！${_game.lastCombo} 連擊 +${_game.lastPoints}'
+          : '${food.name}，配對成功 +${_game.lastPoints}';
+      _message = isNew ? '$head・收錄圖鑑' : head;
     });
-
-    if (result == PickResult.mismatched) {
-      _hideTimer = Timer(const Duration(milliseconds: 700), () {
-        if (mounted) setState(_game.hideMismatched);
-      });
-    } else if (result == PickResult.finished) {
+    if (_game.isWon) {
       _clock?.cancel();
-      Future.delayed(const Duration(milliseconds: 700), () {
+      // 等最後一組的特效放完，再跳出過關視窗
+      Future.delayed(MatchBurst.duration, () {
         if (mounted) _showWinDialog();
       });
+    }
+  }
+
+  /// 在剛配對的兩張牌上放特效：第二張牌上面飄分數，連擊越高特效越大，最後一組加倍。
+  void _addBursts() {
+    if (MediaQuery.of(context).disableAnimations) return;
+    final combo = _game.lastCombo;
+    final intensity = _game.isWon ? combo + 5 : combo;
+    final cards = _game.lastMatchedCards;
+    _bursts
+      ..add(_Burst(card: cards[0], intensity: intensity, seed: _burstCount++))
+      ..add(_Burst(
+        card: cards[1],
+        intensity: intensity,
+        seed: _burstCount++,
+        label: '+${_game.lastPoints}',
+        sublabel: combo > 1 ? '$combo 連擊' : null,
+      ));
+  }
+
+  Future<void> _onItem(ItemType type) async {
+    if (_paused || !_game.canUseItem(type)) return;
+    if (_store.itemCount(type) == 0) {
+      await _offerFreeItem(type);
+      return;
+    }
+    _game.useItem(type);
+    _store.consumeItem(type);
+    switch (type) {
+      case ItemType.magnifier:
+        _onMatched();
+      case ItemType.hourglass:
+        _sounds.play(Sfx.coin);
+        setState(() => _message = '時間 +${MatchingGame.hourglassSeconds} 秒');
+      case ItemType.charm:
+        _sounds.play(Sfx.coin);
+        setState(() => _message = '護身符生效：下一次翻錯不會中斷連擊');
+      case ItemType.luckyCat:
+        _sounds.play(Sfx.coin);
+        setState(() => _message = '招財貓生效：這一局金幣 ×1.5');
+    }
+  }
+
+  /// 道具用完時：看廣告免費領一個。
+  Future<void> _offerFreeItem(ItemType type) async {
+    setState(() => _paused = true);
+    final watch = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightColors.paper,
+        title: Text(
+          '${type.emoji} ${type.label}用完了',
+          style: const TextStyle(color: NightColors.ink, fontWeight: FontWeight.w800),
+        ),
+        content: Text(type.description, style: const TextStyle(color: NightColors.ink)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消', style: TextStyle(color: NightColors.ink)),
+          ),
+          TextButton(
+            key: const ValueKey('free_item'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              '看廣告領 1 個',
+              style: TextStyle(color: Color(0xFFA2580A), fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (watch != true) {
+      setState(() => _paused = false);
+      return;
+    }
+    if (await _watchRewarded()) {
+      await _store.addItem(type);
+      if (mounted) {
+        setState(() {});
+        _toast('獲得 1 個${type.label}');
+      }
     }
   }
 
@@ -223,7 +341,11 @@ class _GameScreenState extends State<GameScreen> {
     final earned = _game.coinsEarned;
     final hasNext = _levelIndex + 1 < levels.length;
     final isRecord = await _store.recordStars(_levelIndex, _game.stars);
+    if (hasNext) await _store.unlockUpTo(_levelIndex + 2);
+    final clears = await _store.addClear();
+    await _store.recordWin(stars: _game.stars, mistakes: _game.mistakes);
     if (!mounted) return;
+    final newAchievements = achievements.where((a) => _store.isAchieved(a) && !_achievedAtStart.contains(a.id));
     final choice = await showDialog<_Choice>(
       context: context,
       barrierDismissible: false,
@@ -235,6 +357,7 @@ class _GameScreenState extends State<GameScreen> {
           '總分 ${_game.score}，獲得 🪙 $earned',
           if (isRecord && _game.stars > 1) '刷新這一攤的最佳紀錄！',
           if (!hasNext) '恭喜逛完所有夜市！',
+          for (final a in newAchievements) '🏆 成就達成：${a.name}',
         ],
         adLabel: '看廣告，金幣 ×2',
         primaryLabel: hasNext ? '前往下一攤：${levels[_levelIndex + 1].name}' : '再玩一次',
@@ -251,8 +374,6 @@ class _GameScreenState extends State<GameScreen> {
     }
 
     await _store.addCoins(coins);
-    if (hasNext) await _store.unlockUpTo(_levelIndex + 2);
-    final clears = await _store.addClear();
     if (!mounted) return;
     _sounds.play(Sfx.coin);
     if (watchedAd) _toast('金幣 ×2，獲得 🪙 $coins');
@@ -331,15 +452,40 @@ class _GameScreenState extends State<GameScreen> {
                 style: const TextStyle(color: NightColors.glow, fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 10),
-              _AdButton(
-                key: const ValueKey('peek'),
-                label: '看廣告：偷看全部 2 秒',
-                onPressed: _game.canPeek && !_paused ? _onPeek : null,
-              ),
+              _buildItemBar(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// 道具列：4 種道具加上看廣告偷看。
+  Widget _buildItemBar() {
+    return Row(
+      children: [
+        for (final type in ItemType.values) ...[
+          Expanded(
+            child: _ItemTile(
+              key: ValueKey('item_${type.name}'),
+              emoji: type.emoji,
+              label: type.label,
+              badge: _game.usedItems.contains(type) ? '已用' : '×${_store.itemCount(type)}',
+              onTap: !_paused && _game.canUseItem(type) ? () => _onItem(type) : null,
+            ),
+          ),
+          const SizedBox(width: 6),
+        ],
+        Expanded(
+          child: _ItemTile(
+            key: const ValueKey('peek'),
+            emoji: '👀',
+            label: '偷看',
+            badge: '廣告',
+            onTap: _game.canPeek && !_paused ? _onPeek : null,
+          ),
+        ),
+      ],
     );
   }
 
@@ -389,21 +535,25 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _buildHud() {
-    Widget cell(String label, String value, Key key) => Expanded(
+    Widget cell(String label, String value, Key key, int pulseOn) => Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(color: NightColors.stall, borderRadius: BorderRadius.circular(8)),
             child: Column(
               children: [
                 Text(label, style: const TextStyle(color: NightColors.mist, fontSize: 11, letterSpacing: 1.5)),
-                Text(
-                  value,
-                  key: key,
-                  style: const TextStyle(
-                    color: NightColors.paper,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                PulseOnIncrease(
+                  trigger: pulseOn,
+                  scale: 1.3,
+                  child: Text(
+                    value,
+                    key: key,
+                    style: const TextStyle(
+                      color: NightColors.paper,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
               ],
@@ -412,11 +562,11 @@ class _GameScreenState extends State<GameScreen> {
         );
     return Row(
       children: [
-        cell('時間', '${_game.timeLeft}', const ValueKey('time')),
+        cell('時間', '${_game.timeLeft}', const ValueKey('time'), 0),
         const SizedBox(width: 8),
-        cell('分數', '${_game.score}', const ValueKey('score')),
+        cell('分數', '${_game.score}', const ValueKey('score'), _game.score),
         const SizedBox(width: 8),
-        cell('連擊', '×${_game.combo}', const ValueKey('combo')),
+        cell('連擊', '×${_game.combo}', const ValueKey('combo'), _game.combo),
       ],
     );
   }
@@ -426,7 +576,7 @@ class _GameScreenState extends State<GameScreen> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(3),
       child: LinearProgressIndicator(
-        value: _game.timeLeft / max(_game.level.seconds, _game.timeLeft),
+        value: _game.timeLeft / max(_game.totalSeconds, _game.timeLeft),
         minHeight: 6,
         backgroundColor: NightColors.stall,
         color: low ? NightColors.lantern : NightColors.glow,
@@ -453,27 +603,54 @@ class _GameScreenState extends State<GameScreen> {
         }
       }
       final cardHeight = cardWidth * 4 / 3;
+      Offset cardCenter(int i) => Offset(
+            (i % columns) * (cardWidth + gap) + cardWidth / 2,
+            (i ~/ columns) * (cardHeight + gap) + cardHeight / 2,
+          );
       return Center(
         // 每局換新的 key，讓卡片整組重建；否則換關時會播放上一局卡片蓋回去的動畫
         key: ObjectKey(_game),
         child: SizedBox(
           width: cardWidth * columns + gap * (columns - 1),
-          child: Wrap(
-            spacing: gap,
-            runSpacing: gap,
+          // 特效畫在牌桌上層，可以超出牌桌範圍，也不會擋到點牌
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              for (var i = 0; i < count; i++)
-                SizedBox(
-                  width: cardWidth,
-                  height: cardHeight,
-                  child: CardWidget(
-                    key: ValueKey('card_$i'),
-                    food: _game.cards[i],
-                    isShow: _game.isFaceUp(i),
-                    isMatched: _game.isMatched[i],
-                    skin: skin,
-                    width: cardWidth,
-                    onTap: () => _onCardTap(i),
+              Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (var i = 0; i < count; i++)
+                    SizedBox(
+                      width: cardWidth,
+                      height: cardHeight,
+                      child: CardWidget(
+                        key: ValueKey('card_$i'),
+                        food: _game.cards[i],
+                        isShow: _game.isFaceUp(i),
+                        isMatched: _game.isMatched[i],
+                        skin: skin,
+                        width: cardWidth,
+                        onTap: () => _onCardTap(i),
+                      ),
+                    ),
+                ],
+              ),
+              for (final burst in _bursts)
+                Positioned(
+                  left: cardCenter(burst.card).dx - MatchBurst.size / 2,
+                  top: cardCenter(burst.card).dy - MatchBurst.size / 2,
+                  child: IgnorePointer(
+                    child: MatchBurst(
+                      key: ObjectKey(burst),
+                      intensity: burst.intensity,
+                      seed: burst.seed,
+                      label: burst.label,
+                      sublabel: burst.sublabel,
+                      onDone: () {
+                        if (mounted) setState(() => _bursts.remove(burst));
+                      },
+                    ),
                   ),
                 ),
             ],
@@ -481,6 +658,44 @@ class _GameScreenState extends State<GameScreen> {
         ),
       );
     });
+  }
+}
+
+/// 道具列的一格：圖示、名稱、數量（或「廣告」標籤）。
+class _ItemTile extends StatelessWidget {
+  const _ItemTile({super.key, required this.emoji, required this.label, required this.badge, required this.onTap});
+
+  final String emoji;
+  final String label;
+  final String badge;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onTap == null ? 0.4 : 1,
+      child: Material(
+        color: NightColors.stall,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Column(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 20)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(label, style: const TextStyle(color: NightColors.paper, fontSize: 11)),
+                ),
+                Text(badge, style: const TextStyle(color: NightColors.glow, fontSize: 11, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

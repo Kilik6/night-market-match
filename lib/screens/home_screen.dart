@@ -11,6 +11,9 @@ import '../theme.dart';
 import '../widgets/card_widget.dart';
 import '../widgets/lanterns.dart';
 import '../widgets/night_scaffold.dart';
+import 'achievements_screen.dart';
+import 'daily_screen.dart';
+import 'food_guide_screen.dart';
 import 'game_screen.dart';
 import 'level_select_screen.dart';
 import 'settings_screen.dart';
@@ -32,10 +35,17 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   ProgressStore get _store => widget.store;
 
+  /// 先把小吃圖片載入記憶體，第一次翻到牌時才不會閃一下。
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    for (final food in foods) {
+      if (food.image != null) precacheImage(AssetImage(food.image!), context);
+    }
+  }
+
   /// 最新解鎖的那一攤。
   int get _latestLevel => _store.unlocked.clamp(1, levels.length) - 1;
-
-  int get _totalStars => [for (var i = 0; i < levels.length; i++) _store.bestStars(i)].reduce((a, b) => a + b);
 
   /// 打開下一頁，回來時重新整理（金幣、星數、卡背可能變了）。
   Future<void> _open(Widget page) async {
@@ -66,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '★ $_totalStars / ${levels.length * 3}',
+                  '★ ${_store.totalStars} / ${levels.length * 3}',
                   key: const ValueKey('total_stars'),
                   style: const TextStyle(color: Color(0xFFD9A21B), fontSize: 16, fontWeight: FontWeight.w700),
                 ),
@@ -83,29 +93,80 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => _open(_game(_latestLevel)),
             ),
             const SizedBox(height: 12),
-            MenuButton(
-              key: const ValueKey('levels'),
-              icon: Icons.map_rounded,
-              label: '選擇夜市',
-              subtitle: '已解鎖 ${_latestLevel + 1} / ${levels.length} 攤',
-              onPressed: () => _open(LevelSelectScreen(store: _store, sounds: widget.sounds, gameBuilder: _game)),
+            Row(
+              children: [
+                _tile('levels', Icons.map_rounded, '選擇夜市',
+                    () => _open(LevelSelectScreen(store: _store, sounds: widget.sounds, gameBuilder: _game))),
+                const SizedBox(width: 10),
+                _tile('shop', Icons.storefront_rounded, '夜市商店',
+                    () => _open(ShopScreen(store: _store, sounds: widget.sounds))),
+                const SizedBox(width: 10),
+                _tile('daily', Icons.today_rounded, '每日任務',
+                    () => _open(DailyScreen(store: _store, sounds: widget.sounds)),
+                    dot: _store.hasClaimableDaily),
+              ],
             ),
-            const SizedBox(height: 12),
-            MenuButton(
-              key: const ValueKey('shop'),
-              icon: Icons.storefront_rounded,
-              label: '卡背商店',
-              subtitle: '目前使用：${skinById(_store.equippedSkin).name}',
-              onPressed: () => _open(ShopScreen(store: _store, sounds: widget.sounds)),
-            ),
-            const SizedBox(height: 12),
-            MenuButton(
-              key: const ValueKey('settings'),
-              icon: Icons.settings_rounded,
-              label: '設定',
-              onPressed: () => _open(SettingsScreen(store: _store, sounds: widget.sounds)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _tile('achievements', Icons.emoji_events_rounded, '成就',
+                    () => _open(AchievementsScreen(store: _store, sounds: widget.sounds)),
+                    dot: _store.hasClaimableAchievement),
+                const SizedBox(width: 10),
+                _tile('guide', Icons.menu_book_rounded, '小吃圖鑑',
+                    () => _open(FoodGuideScreen(store: _store))),
+                const SizedBox(width: 10),
+                _tile('settings', Icons.settings_rounded, '設定',
+                    () => _open(SettingsScreen(store: _store, sounds: widget.sounds))),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 首頁的小方塊按鈕；dot 表示有獎勵可以領。
+  Widget _tile(String key, IconData icon, String label, VoidCallback onTap, {bool dot = false}) {
+    return Expanded(
+      child: Material(
+        color: NightColors.stall,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          key: ValueKey(key),
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 26, color: NightColors.glow),
+                    const SizedBox(height: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(label, style: const TextStyle(color: NightColors.paper, fontSize: 14, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+                if (dot)
+                  Positioned(
+                    top: -4,
+                    right: 22,
+                    child: Container(
+                      key: ValueKey('${key}_dot'),
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(color: NightColors.lantern, shape: BoxShape.circle),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

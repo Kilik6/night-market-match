@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../game/card_skins.dart';
 import '../game/night_market_data.dart';
 import '../theme.dart';
+import 'food_icon.dart';
+import 'match_effects.dart';
 
 /// 單張夜市卡片：卡背依造型（預設紅色寫「夜」），翻開是小吃 emoji 和名稱，有 3D 翻牌動畫。
 class CardWidget extends StatelessWidget {
@@ -23,37 +25,46 @@ class CardWidget extends StatelessWidget {
   final bool isMatched;
   final VoidCallback onTap;
   final double width;
+
   /// 沒指定就用預設的紅燈籠。
   final CardSkin? skin;
 
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
-    return Semantics(
-      button: true,
-      label: isShow ? food.name : '蓋著的卡片',
-      child: GestureDetector(
-        onTap: onTap,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: isShow ? pi : 0),
-          duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 350),
-          curve: Curves.easeOut,
-          builder: (context, angle, _) {
-            final showFront = angle > pi / 2;
-            return Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0015)
-                ..rotateY(angle),
-              child: showFront
-                  ? Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.rotationY(pi),
-                      child: _front(),
-                    )
-                  : _back(),
-            );
-          },
+    return PulseOnIncrease(
+      // 配對成功時彈跳發光；delay 是等翻牌動畫跑完
+      trigger: isMatched ? 1 : 0,
+      scale: 1.16,
+      duration: const Duration(milliseconds: 750),
+      delay: 0.35,
+      glow: NightColors.jade,
+      child: Semantics(
+        button: true,
+        label: isShow ? food.name : '蓋著的卡片',
+        child: GestureDetector(
+          onTap: onTap,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: isShow ? pi : 0),
+            duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 350),
+            curve: Curves.easeOut,
+            builder: (context, angle, _) {
+              final showFront = angle > pi / 2;
+              return Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.0015)
+                  ..rotateY(angle),
+                child: showFront
+                    ? Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.rotationY(pi),
+                        child: _front(),
+                      )
+                    : _back(),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -72,7 +83,7 @@ class CardWidget extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(food.emoji, style: TextStyle(fontSize: width * 0.4)),
+          FoodIcon(food: food, size: width * 0.4),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(

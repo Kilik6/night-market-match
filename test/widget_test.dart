@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_market_match/game/achievements.dart';
 import 'package:night_market_match/game/card_skins.dart';
+import 'package:night_market_match/game/items.dart';
 import 'package:night_market_match/game/matching_game.dart';
 import 'package:night_market_match/game/night_market_data.dart';
 import 'package:night_market_match/screens/game_screen.dart';
@@ -10,6 +13,7 @@ import 'package:night_market_match/screens/home_screen.dart';
 import 'package:night_market_match/services/ad_service.dart';
 import 'package:night_market_match/services/progress_store.dart';
 import 'package:night_market_match/services/sound_service.dart';
+import 'package:night_market_match/widgets/match_effects.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 假的廣告服務：記錄被呼叫幾次，並可決定獎勵型廣告是否成功。
@@ -197,6 +201,119 @@ void main() {
     });
   });
 
+  group('道具與裝備', () {
+    MatchingGame newGame({int level = 0, int bonus = 0, int cap = 5, double multiplier = 1}) => MatchingGame(
+          level: levels[level],
+          random: Random(1),
+          bonusSeconds: bonus,
+          comboCap: cap,
+          coinMultiplier: multiplier,
+        );
+
+    test('放大鏡：配對已翻開的那張，沒翻牌就配第一組；每局一次', () {
+      final g = newGame();
+      g.pick(3);
+      final partner = pairOf(g, 3);
+      expect(g.useItem(ItemType.magnifier), isTrue);
+      expect(g.isMatched[3] && g.isMatched[partner], isTrue);
+      expect(g.firstPickedIndex, isNull);
+      expect(g.score, 100);
+      expect(g.useItem(ItemType.magnifier), isFalse);
+
+      final g2 = newGame();
+      g2.useItem(ItemType.magnifier);
+      expect(g2.isMatched[0], isTrue);
+      expect(g2.matchedPairs, 1);
+    });
+
+    test('放大鏡：翻錯等待中不能用；配完最後一組會過關', () {
+      final g = newGame();
+      g.pick(0);
+      g.pick(differentFrom(g, 0));
+      expect(g.canUseItem(ItemType.magnifier), isFalse);
+      g.hideMismatched();
+      expect(g.canUseItem(ItemType.magnifier), isTrue);
+
+      final g2 = newGame();
+      final lastPair = g2.cards.last;
+      for (var i = 0; i < g2.cards.length; i++) {
+        if (g2.isMatched[i] || g2.cards[i] == lastPair) continue;
+        g2.pick(i);
+        g2.pick(pairOf(g2, i));
+      }
+      expect(g2.pairsLeft, 1);
+      g2.useItem(ItemType.magnifier);
+      expect(g2.isWon, isTrue);
+    });
+
+    test('沙漏 +10 秒，時間到之後不能用', () {
+      final g = newGame();
+      g.tick();
+      g.useItem(ItemType.hourglass);
+      expect(g.timeLeft, 69);
+
+      final g2 = newGame();
+      for (var s = 0; s < 60; s++) {
+        g2.tick();
+      }
+      expect(g2.useItem(ItemType.hourglass), isFalse);
+    });
+
+    test('護身符擋一次翻錯：連擊不中斷，但翻錯次數照算', () {
+      final g = newGame(level: 1);
+      g.pick(0);
+      g.pick(pairOf(g, 0));
+      expect(g.combo, 2);
+      g.useItem(ItemType.charm);
+
+      int unmatched() => List.generate(g.cards.length, (j) => j).firstWhere((j) => !g.isMatched[j]);
+      int other(int a) => List.generate(g.cards.length, (j) => j)
+          .firstWhere((j) => !g.isMatched[j] && g.cards[j] != g.cards[a]);
+
+      var a = unmatched();
+      g.pick(a);
+      g.pick(other(a));
+      expect(g.combo, 2);
+      expect(g.mistakes, 1);
+      expect(g.charmActive, isFalse);
+      g.hideMismatched();
+
+      a = unmatched();
+      g.pick(a);
+      g.pick(other(a));
+      expect(g.combo, 1);
+      expect(g.mistakes, 2);
+    });
+
+    test('招財貓和算盤都會增加金幣，可以疊加', () {
+      final plain = newGame();
+      solve(plain);
+      expect(plain.coinsEarned, 260);
+
+      final g = newGame(multiplier: 1.2);
+      g.useItem(ItemType.luckyCat);
+      solve(g);
+      expect(g.coinsEarned, (260 * 1.2 * 1.5).round());
+    });
+
+    test('裝備：帽子加時間，攤車提高連擊上限', () {
+      final g = newGame(level: 2, bonus: 6, cap: 7);
+      expect(g.timeLeft, 91);
+      expect(g.totalSeconds, 91);
+      solve(g);
+      expect(g.bestCombo, 7);
+      expect(g.combo, 7);
+    });
+
+    test('裝備效果換算與費用', () {
+      expect(GearEffects.bonusSeconds(3), 6);
+      expect(GearEffects.coinMultiplier(3), closeTo(1.3, 0.001));
+      expect(GearEffects.comboCap(2), 7);
+      expect(GearType.hat.maxLevel, 3);
+      expect(GearType.cart.maxLevel, 2);
+    });
+  });
+
   group('內容資料', () {
     test('18 攤夜市，難度遞增，小吃種類夠最大的一攤用', () {
       expect(levels.length, 18);
@@ -221,6 +338,27 @@ void main() {
       expect(cardSkins.map((s) => s.id).toSet().length, cardSkins.length);
       expect(skinById(defaultSkinId).price, 0);
       expect(skinById('不存在').id, defaultSkinId);
+    });
+
+    test('小吃的專屬圖片檔案都存在，小籠包和木瓜牛奶用專屬圖片', () {
+      for (final food in foods.where((f) => f.image != null)) {
+        expect(File(food.image!).existsSync(), isTrue, reason: food.name);
+      }
+      expect(foods.firstWhere((f) => f.name == '小籠包').image, isNotNull);
+      expect(foods.firstWhere((f) => f.name == '木瓜牛奶').image, isNotNull);
+    });
+
+    test('20 種小吃都有介紹；成就的卡背獎勵都存在，id 不重複', () {
+      expect(foods.every((f) => f.description.isNotEmpty), isTrue);
+      expect(achievements.map((a) => a.id).toSet().length, achievements.length);
+      expect(dailyTaskPool.map((t) => t.id).toSet().length, dailyTaskPool.length);
+      for (final a in achievements.where((a) => a.skinId != null)) {
+        expect(cardSkins.any((s) => s.id == a.skinId && s.achievementOnly), isTrue, reason: a.id);
+      }
+      // 達成條件要對得上目前的關卡和小吃數量
+      expect(achievements.firstWhere((a) => a.id == 'tour').target, levels.length);
+      expect(achievements.firstWhere((a) => a.id == 'god').target, levels.length * 3);
+      expect(achievements.firstWhere((a) => a.id == 'foods20').target, foods.length);
     });
   });
 
@@ -256,6 +394,110 @@ void main() {
       expect(store.bestStars(2), 3);
     });
 
+    test('道具：買、用、數量不夠不能用', () async {
+      SharedPreferences.setMockInitialValues({'coins': 150});
+      final store = await ProgressStore.load();
+      expect(await store.buyItem(ItemType.hourglass), isTrue);
+      expect(store.coins, 50);
+      expect(await store.buyItem(ItemType.hourglass), isFalse);
+      expect(store.itemCount(ItemType.hourglass), 1);
+      expect(await store.consumeItem(ItemType.hourglass), isTrue);
+      expect(await store.consumeItem(ItemType.hourglass), isFalse);
+      expect(store.itemCount(ItemType.hourglass), 0);
+    });
+
+    test('裝備升級：扣金幣、滿級後不能再升', () async {
+      SharedPreferences.setMockInitialValues({'coins': 5000});
+      final store = await ProgressStore.load();
+      expect(store.upgradeCost(GearType.cart), 500);
+      expect(await store.upgradeGear(GearType.cart), isTrue);
+      expect(store.upgradeCost(GearType.cart), 1200);
+      expect(await store.upgradeGear(GearType.cart), isTrue);
+      expect(store.upgradeCost(GearType.cart), isNull);
+      expect(await store.upgradeGear(GearType.cart), isFalse);
+      expect(store.gearLevel(GearType.cart), 2);
+      expect(store.coins, 3300);
+    });
+
+    test('成就：要達成才能領，只能領一次，卡背獎勵不能用金幣買', () async {
+      SharedPreferences.setMockInitialValues({'coins': 9999});
+      final store = await ProgressStore.load();
+      final god = achievements.firstWhere((a) => a.id == 'god');
+      final combo = achievements.firstWhere((a) => a.id == 'combo5');
+      expect(await store.buySkin(skinById('god')), isFalse);
+      expect(await store.claimAchievement(combo), isFalse);
+
+      await store.recordMatch(foods[0], 5);
+      expect(store.isAchieved(combo), isTrue);
+      expect(store.hasClaimableAchievement, isTrue);
+      expect(await store.claimAchievement(combo), isTrue);
+      expect(await store.claimAchievement(combo), isFalse);
+      expect(store.coins, 10099);
+
+      for (var i = 0; i < levels.length; i++) {
+        await store.recordStars(i, 3);
+      }
+      expect(await store.claimAchievement(god), isTrue);
+      expect(store.ownedSkins, contains('god'));
+    });
+
+    test('圖鑑：同一種小吃只收錄一次', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await ProgressStore.load();
+      expect(await store.recordMatch(foods[0], 1), isTrue);
+      expect(await store.recordMatch(foods[0], 1), isFalse);
+      expect(store.discoveredFoods, {foods[0].name});
+    });
+
+    test('每日任務：同一天任務固定，換日後進度和領取都重來', () async {
+      SharedPreferences.setMockInitialValues({});
+      var today = DateTime(2026, 11, 7);
+      final store = await ProgressStore.load(clock: () => today);
+      final tasks = store.todayTasks;
+      expect(tasks.length, 3);
+      expect(tasks.map((t) => t.id).toSet().length, 3);
+      expect(store.todayTasks.map((t) => t.id), tasks.map((t) => t.id));
+
+      const task = DailyTask(id: 'match', description: '', target: 2, coins: 40);
+      await store.recordMatch(foods[0], 1);
+      expect(await store.claimDaily(task), isFalse); // 還沒完成
+      await store.recordMatch(foods[0], 1);
+      expect(await store.claimDaily(task), isTrue);
+      expect(await store.claimDaily(task), isFalse); // 不能重複領
+      expect(store.coins, 40);
+
+      today = DateTime(2026, 11, 8);
+      expect(store.dailyProgress('match'), 0);
+      expect(store.isDailyClaimed(task), isFalse);
+    });
+
+    test('簽到：連續天數遞增，斷掉重來，滿 7 天循環', () async {
+      SharedPreferences.setMockInitialValues({});
+      var today = DateTime(2026, 11, 28); // 跨月份也要算連續
+      final store = await ProgressStore.load(clock: () => today);
+      final got = <int>[];
+      for (var i = 0; i < 8; i++) {
+        got.add(await store.checkIn());
+        expect(await store.checkIn(), 0); // 同一天不能簽兩次
+        today = today.add(const Duration(days: 1));
+      }
+      expect(got, [...checkInRewards, checkInRewards.first]);
+
+      today = today.add(const Duration(days: 3)); // 斷掉
+      expect(store.nextCheckInDay, 1);
+    });
+
+    test('過關紀錄：零失誤、三星計入成就和每日任務', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await ProgressStore.load();
+      await store.recordWin(stars: 3, mistakes: 0);
+      await store.recordWin(stars: 2, mistakes: 4);
+      expect(store.perfectRuns, 1);
+      expect(store.dailyProgress('clear'), 2);
+      expect(store.dailyProgress('stars3'), 1);
+      expect(store.dailyProgress('perfect'), 1);
+    });
+
     test('重置進度：清掉金幣、解鎖、星數、卡背，保留聲音設定和移除廣告', () async {
       SharedPreferences.setMockInitialValues({
         'coins': 900,
@@ -268,6 +510,12 @@ void main() {
         'muted': true,
         'music_on': false,
         'ads_removed': true,
+        'item_hourglass': 3,
+        'gear_hat': 2,
+        'stat_best_combo': 5,
+        'foods': ['雞排'],
+        'ach_claimed': ['combo5'],
+        'checkin_streak': 4,
       });
       final store = await ProgressStore.load();
       await store.resetProgress();
@@ -278,6 +526,12 @@ void main() {
       expect(store.bestStars(2), 0);
       expect(store.ownedSkins, {defaultSkinId});
       expect(store.equippedSkin, defaultSkinId);
+      expect(store.itemCount(ItemType.hourglass), 0);
+      expect(store.gearLevel(GearType.hat), 0);
+      expect(store.bestCombo, 0);
+      expect(store.discoveredFoods, isEmpty);
+      expect(store.isClaimed(achievements.firstWhere((a) => a.id == 'combo5')), isFalse);
+      expect(store.checkInStreak, 0);
       expect(store.muted, isTrue);
       expect(store.musicOn, isFalse);
       expect(store.adsRemoved, isTrue);
@@ -341,15 +595,15 @@ void main() {
       await tester.tap(find.byKey(ValueKey('card_$j')));
       await tester.pump();
     }
-    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 1100)); // 最後一組的特效放完才跳過關視窗
     await tester.pump(const Duration(milliseconds: 300));
   }
 
   group('GameScreen', () {
-    testWidgets('開局：逢甲夜市 12 張蓋著的牌', (tester) async {
+    testWidgets('開局：南機場夜市 12 張蓋著的牌', (tester) async {
       await pumpGame(tester);
-      expect(find.text('逢甲夜市'), findsOneWidget);
-      expect(find.text('第 1 攤・台中'), findsOneWidget);
+      expect(find.text('南機場夜市'), findsOneWidget);
+      expect(find.text('第 1 攤・台北'), findsOneWidget);
       expect(find.text('夜'), findsNWidgets(12));
     });
 
@@ -372,12 +626,12 @@ void main() {
     testWidgets('過關：金幣、解鎖、星數寫進存檔，可以直接前往下一攤', (tester) async {
       await pumpGame(tester);
       await solveOnScreen(tester, 0);
-      expect(find.text('收攤！逢甲夜市完成'), findsOneWidget);
+      expect(find.text('收攤！南機場夜市完成'), findsOneWidget);
       expect(find.text('★★★'), findsOneWidget);
 
-      await tester.tap(find.text('前往下一攤：士林夜市'));
+      await tester.tap(find.text('前往下一攤：城隍廟夜市'));
       await settle(tester);
-      expect(find.text('士林夜市'), findsOneWidget);
+      expect(find.text('城隍廟夜市'), findsOneWidget);
       expect(find.text('🪙 260'), findsOneWidget); // (2000 + 60 秒 × 10) / 10
       expect(find.text('夜'), findsNWidgets(16));
       expect(store.coins, 260);
@@ -400,7 +654,7 @@ void main() {
     testWidgets('第 3 次過關播插頁式廣告；看過獎勵型廣告的那次不播', (tester) async {
       await pumpGame(tester, saved: {'clears': 2});
       await solveOnScreen(tester, 0);
-      await tester.tap(find.text('前往下一攤：士林夜市'));
+      await tester.tap(find.text('前往下一攤：城隍廟夜市'));
       await tester.pump();
       expect(ads.interstitialShown, 1);
 
@@ -475,17 +729,131 @@ void main() {
       expect(sounds.played, contains(Sfx.combo));
       expect(sounds.played.last, Sfx.win);
 
-      await tester.tap(find.text('前往下一攤：士林夜市'));
+      await tester.tap(find.text('前往下一攤：城隍廟夜市'));
       await tester.pump();
       expect(sounds.played.last, Sfx.coin);
     });
 
-    testWidgets('最難的羅東夜市 24 張牌也能完整顯示', (tester) async {
+    testWidgets('最難的大東夜市 24 張牌也能完整顯示', (tester) async {
       await pumpGame(tester, level: 5);
-      expect(find.text('羅東夜市'), findsOneWidget);
+      expect(find.text('大東夜市'), findsOneWidget);
       expect(find.text('夜'), findsNWidgets(24));
       for (var i = 0; i < 24; i++) {
         expect(tester.getRect(find.byKey(ValueKey('card_$i'))).bottom, lessThan(2556 / 3));
+      }
+    });
+
+    testWidgets('道具列：使用沙漏加時間、扣數量，每局只能用一次', (tester) async {
+      await pumpGame(tester, saved: {'item_hourglass': 2});
+      await tester.tap(find.byKey(const ValueKey('item_hourglass')));
+      await tester.pump();
+      expect(find.text('70'), findsOneWidget);
+      expect(store.itemCount(ItemType.hourglass), 1);
+      expect(find.text('已用'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('item_hourglass')));
+      await tester.pump();
+      expect(store.itemCount(ItemType.hourglass), 1);
+    });
+
+    testWidgets('道具用完：可以看廣告領一個，倒數暫停', (tester) async {
+      await pumpGame(tester);
+      await tester.tap(find.byKey(const ValueKey('item_magnifier')));
+      await settle(tester);
+      expect(find.text('🔍 放大鏡用完了'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 3));
+      await tapAndSettle(tester, find.byKey(const ValueKey('free_item')));
+      expect(ads.rewardedShown, 1);
+      expect(store.itemCount(ItemType.magnifier), 1);
+      final time = int.parse(tester.widget<Text>(find.byKey(const ValueKey('time'))).data!);
+      expect(time, greaterThanOrEqualTo(58));
+      await tester.pump(const Duration(seconds: 3)); // 讓提示訊息計時結束
+    });
+
+    testWidgets('放大鏡配對一組，並收錄進圖鑑', (tester) async {
+      await pumpGame(tester, saved: {'item_magnifier': 1});
+      await tester.tap(find.byKey(const ValueKey('item_magnifier')));
+      await settle(tester);
+      expect(find.text('夜'), findsNWidgets(10));
+      expect(store.discoveredFoods.length, 1);
+      expect(find.textContaining('收錄圖鑑'), findsOneWidget);
+    });
+
+    testWidgets('裝備生效：帽子增加時間、算盤增加金幣', (tester) async {
+      await pumpGame(tester, saved: {'gear_hat': 1, 'gear_abacus': 1});
+      expect(find.text('62'), findsOneWidget);
+      await solveOnScreen(tester, 0);
+      // (2000 + 62 秒 × 10) / 10 × 1.1 = 288
+      expect(find.text('總分 2620，獲得 🪙 288'), findsOneWidget);
+    });
+
+    testWidgets('過關時顯示新達成的成就，零失誤和圖鑑都有紀錄', (tester) async {
+      await pumpGame(tester);
+      await solveOnScreen(tester, 0);
+      expect(find.text('🏆 成就達成：初逛夜市'), findsOneWidget);
+      expect(find.text('🏆 成就達成：零失誤'), findsOneWidget);
+      expect(find.text('🏆 成就達成：連擊高手'), findsOneWidget);
+      expect(store.perfectRuns, 1);
+      expect(store.discoveredFoods.length, 6);
+    });
+
+    testWidgets('配對特效：飄出分數和連擊，放完就消失，不擋住點牌', (tester) async {
+      await pumpGame(tester);
+      final g = mirror(0);
+      final second = pairOf(g, 0);
+      await tester.tap(find.byKey(const ValueKey('card_0')));
+      await tester.tap(find.byKey(ValueKey('card_$second')));
+      await tester.pump();
+      expect(find.byType(MatchBurst), findsNWidgets(2));
+
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('+100'), findsOneWidget);
+
+      // 第二組：連擊 2，特效進行中也能繼續點牌
+      g.pick(0);
+      g.pick(second);
+      final next = List.generate(g.cards.length, (j) => j).firstWhere((j) => !g.isMatched[j]);
+      await tester.tap(find.byKey(ValueKey('card_$next')));
+      await tester.tap(find.byKey(ValueKey('card_${pairOf(g, next)}')));
+      await tester.pump();
+      expect(find.byType(MatchBurst), findsNWidgets(4));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('+200'), findsOneWidget);
+      expect(find.text('2 連擊'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 1100));
+      await tester.pump();
+      expect(find.byType(MatchBurst), findsNothing);
+    });
+
+    testWidgets('手機開了減少動態效果就不放特效', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true, size: Size(393, 852)),
+          child: GameScreen(levelIndex: 0, store: store, ads: ads, sounds: sounds, random: Random(1)),
+        ),
+      ));
+      final g = mirror(0);
+      await tester.tap(find.byKey(const ValueKey('card_0')));
+      await tester.tap(find.byKey(ValueKey('card_${pairOf(g, 0)}')));
+      await tester.pump();
+      expect(find.text('夜'), findsNWidgets(10));
+      expect(find.byType(MatchBurst), findsNothing);
+    });
+
+    testWidgets('有專屬圖片的小吃，翻開時顯示圖片而不是 emoji', (tester) async {
+      await pumpGame(tester);
+      final g = mirror(0);
+      final index = List.generate(g.cards.length, (i) => i).firstWhere((i) => g.cards[i].image != null, orElse: () => -1);
+      // 這個種子的第一關不一定抽到，抽到才檢查
+      if (index >= 0) {
+        await tester.tap(find.byKey(ValueKey('card_$index')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.byKey(ValueKey(g.cards[index].image!)), findsWidgets);
+        expect(find.text(g.cards[index].emoji), findsNothing);
       }
     });
 
@@ -503,12 +871,12 @@ void main() {
     testWidgets('首頁：開始遊戲進到最新解鎖的一攤，並顯示總星數和金幣', (tester) async {
       await pumpHome(tester, saved: {'unlocked': 2, 'coins': 123, 'stars_0': 3});
       expect(find.text('夜市翻牌'), findsOneWidget);
-      expect(find.text('第 2 攤・士林夜市'), findsOneWidget);
+      expect(find.text('第 2 攤・城隍廟夜市'), findsOneWidget);
       expect(find.text('★ 3 / 54'), findsOneWidget);
       expect(find.text('🪙 123'), findsOneWidget);
 
       await tapAndSettle(tester, find.byKey(const ValueKey('start')));
-      expect(find.text('士林夜市'), findsOneWidget);
+      expect(find.text('城隍廟夜市'), findsOneWidget);
       expect(find.text('夜'), findsNWidgets(16));
     });
 
@@ -520,7 +888,7 @@ void main() {
       expect(find.text('離開這一攤？'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3)); // 確認視窗開著時不倒數
       await tapAndSettle(tester, find.text('繼續玩'));
-      expect(find.text('逢甲夜市'), findsOneWidget);
+      expect(find.text('南機場夜市'), findsOneWidget);
       final time = int.parse(tester.widget<Text>(find.byKey(const ValueKey('time'))).data!);
       expect(time, greaterThanOrEqualTo(58));
 
@@ -533,11 +901,11 @@ void main() {
       await pumpHome(tester);
       await tapAndSettle(tester, find.byKey(const ValueKey('levels')));
       expect(find.text('選擇夜市'), findsOneWidget);
-      expect(find.text('逢甲夜市・台中'), findsOneWidget);
+      expect(find.text('南機場夜市・台北'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('level_1')));
       await tester.pump();
-      expect(find.text('先通過「逢甲夜市」才能解鎖'), findsOneWidget);
+      expect(find.text('先通過「南機場夜市」才能解鎖'), findsOneWidget);
 
       await tapAndSettle(tester, find.byKey(const ValueKey('level_0')));
       await solveOnScreen(tester, 0);
@@ -546,13 +914,14 @@ void main() {
       expect(tester.widget<Text>(find.byKey(const ValueKey('level_stars_0'))).data, '★★★');
 
       await tapAndSettle(tester, find.byKey(const ValueKey('level_1')));
-      expect(find.text('士林夜市'), findsOneWidget);
+      expect(find.text('城隍廟夜市'), findsOneWidget);
     });
 
-    testWidgets('卡背商店：金幣不夠會提示，買了就換上，首頁顯示目前卡背', (tester) async {
+    testWidgets('商店：卡背金幣不夠會提示，買了就換上，成就卡背不能買', (tester) async {
       await pumpHome(tester, saved: {'coins': 400});
       await tapAndSettle(tester, find.byKey(const ValueKey('shop')));
-      expect(find.text('卡背商店'), findsOneWidget);
+      expect(find.text('夜市商店'), findsOneWidget);
+      await tapAndSettle(tester, find.text('卡背'));
 
       await tester.tap(find.byKey(const ValueKey('skin_starry'))); // 500，不夠
       await tester.pump();
@@ -567,8 +936,62 @@ void main() {
 
       await tester.pageBack();
       await settle(tester);
-      expect(find.text('目前使用：招財金'), findsOneWidget);
       expect(find.text('🪙 100'), findsOneWidget);
+      expect(find.text('福'), findsNWidgets(2)); // 首頁扇形卡片的兩張卡背
+    });
+
+    testWidgets('商店：買道具、升級裝備', (tester) async {
+      await pumpHome(tester, saved: {'coins': 500});
+      await tapAndSettle(tester, find.byKey(const ValueKey('shop')));
+
+      await tester.tap(find.byKey(const ValueKey('buy_hourglass')));
+      await tester.pump();
+      expect(store.itemCount(ItemType.hourglass), 1);
+      expect(store.coins, 400);
+      expect(find.text('沙漏（持有 1）'), findsOneWidget);
+
+      await tapAndSettle(tester, find.text('裝備'));
+      await tester.tap(find.byKey(const ValueKey('upgrade_hat')));
+      await tester.pump();
+      expect(store.gearLevel(GearType.hat), 1);
+      expect(store.coins, 100);
+
+      await tester.tap(find.byKey(const ValueKey('upgrade_hat'))); // 600，不夠
+      await tester.pump();
+      expect(find.text('金幣不夠，還差 🪙 500'), findsOneWidget);
+    });
+
+    testWidgets('成就：達成會顯示紅點，領取後拿到金幣', (tester) async {
+      await pumpHome(tester, saved: {'clears': 1});
+      expect(find.byKey(const ValueKey('achievements_dot')), findsOneWidget);
+      await tapAndSettle(tester, find.byKey(const ValueKey('achievements')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('claim_first_clear')));
+      expect(store.coins, 50);
+      expect(find.text('已領取'), findsOneWidget);
+      await tester.pageBack();
+      await settle(tester);
+      expect(find.byKey(const ValueKey('achievements_dot')), findsNothing);
+    });
+
+    testWidgets('每日任務：簽到領金幣，今天不能再簽', (tester) async {
+      await pumpHome(tester);
+      expect(find.byKey(const ValueKey('daily_dot')), findsOneWidget);
+      await tapAndSettle(tester, find.byKey(const ValueKey('daily')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('check_in')));
+      expect(store.coins, 20);
+      expect(find.text('今天已經簽到了'), findsOneWidget);
+    });
+
+    testWidgets('小吃圖鑑：未收錄顯示問號，收錄的可以看介紹', (tester) async {
+      await pumpHome(tester, saved: {
+        'foods': ['雞排'],
+      });
+      await tapAndSettle(tester, find.byKey(const ValueKey('guide')));
+      expect(find.text('小吃圖鑑 1 / 20'), findsOneWidget);
+      expect(find.text('尚未收錄'), findsWidgets);
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('food_0')));
+      expect(find.textContaining('撒上胡椒鹽'), findsOneWidget);
     });
 
     testWidgets('設定：音樂和音效開關會存檔', (tester) async {
@@ -602,24 +1025,44 @@ void main() {
 
       await tester.pageBack();
       await settle(tester);
-      expect(find.text('第 1 攤・逢甲夜市'), findsOneWidget);
+      expect(find.text('第 1 攤・南機場夜市'), findsOneWidget);
       expect(find.text('🪙 0'), findsOneWidget);
     });
   
     testWidgets('選擇夜市：18 攤可以捲動，打開時會捲到最新解鎖的那一攤', (tester) async {
       await pumpHome(tester, saved: {'unlocked': 15});
       await tapAndSettle(tester, find.byKey(const ValueKey('levels')));
-      expect(find.text('大東夜市・台南'), findsOneWidget); // 第 15 攤在畫面內
+      expect(find.text('六合夜市・高雄'), findsOneWidget); // 第 15 攤在畫面內
       await tapAndSettle(tester, find.byKey(const ValueKey('level_14')));
-      expect(find.text('大東夜市'), findsOneWidget);
+      expect(find.text('六合夜市'), findsOneWidget);
     });
 
-    testWidgets('最後一攤南機場夜市過關，顯示逛完所有夜市', (tester) async {
+    testWidgets('最後一攤士林夜市過關，顯示逛完所有夜市', (tester) async {
       await pumpGame(tester, saved: {'unlocked': 18}, level: 17);
-      expect(find.text('南機場夜市'), findsOneWidget);
+      expect(find.text('士林夜市'), findsOneWidget);
       await solveOnScreen(tester, 17);
       expect(find.text('恭喜逛完所有夜市！'), findsOneWidget);
       expect(find.text('再玩一次'), findsOneWidget);
+    });
+  
+    testWidgets('小螢幕（iPhone SE）：首頁和 24 張牌的關卡都不會跑版', (tester) async {
+      await pumpHome(tester);
+      tester.view.physicalSize = const Size(750, 1334);
+      tester.view.devicePixelRatio = 2;
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await pumpGame(tester, level: 5);
+      tester.view.physicalSize = const Size(750, 1334);
+      tester.view.devicePixelRatio = 2;
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      for (var i = 0; i < 24; i++) {
+        final rect = tester.getRect(find.byKey(ValueKey('card_$i')));
+        expect(rect.bottom, lessThan(667));
+        expect(rect.width, greaterThan(36), reason: '卡片太小不好點');
+      }
     });
   });
 }

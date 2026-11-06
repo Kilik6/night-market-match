@@ -1,20 +1,39 @@
 import 'dart:math';
 
+import 'items.dart';
 import 'night_market_data.dart';
 
 /// 一局夜市翻牌的純邏輯，不含任何畫面，方便寫單元測試。
 class MatchingGame {
-  MatchingGame({required this.level, List<Food> pool = foods, Random? random})
-      : _pool = pool,
+  MatchingGame({
+    required this.level,
+    List<Food> pool = foods,
+    Random? random,
+    this.bonusSeconds = 0,
+    this.comboCap = defaultComboCap,
+    this.coinMultiplier = 1,
+  })  : _pool = pool,
         _random = random ?? Random() {
     reset();
   }
 
   static const pointsPerMatch = 100;
-  static const maxCombo = 5;
+  static const defaultComboCap = 5;
   static const bonusPerSecond = 10;
+  static const hourglassSeconds = 10;
+  static const luckyCatMultiplier = 1.5;
 
   final Level level;
+
+  /// 裝備「老闆的帽子」多出來的秒數。
+  final int bonusSeconds;
+
+  /// 裝備「攤車」提高後的連擊上限。
+  final int comboCap;
+
+  /// 裝備「算盤」的金幣倍率。
+  final double coinMultiplier;
+
   final List<Food> _pool;
   final Random _random;
 
@@ -40,8 +59,26 @@ class MatchingGame {
   bool revived = false;
   static const reviveSeconds = 15;
 
+  /// 這一局翻錯的次數（零失誤成就用）。
+  int mistakes = 0;
+
+  /// 這一局達到的最高連擊。
+  int bestCombo = 0;
+
+  /// 這一局用過的道具，每種限用一次。
+  Set<ItemType> usedItems = {};
+
+  /// 護身符生效中：下一次翻錯不中斷連擊。
+  bool charmActive = false;
+
+  /// 招財貓生效中：這一局金幣 ×1.5。
+  bool luckyCatActive = false;
+
   /// 最近一次配對成功的小吃與得分，給畫面顯示提示。
   Food? lastMatched;
+
+  /// 最近一次配對成功的兩張牌（畫面放特效用）。
+  List<int> lastMatchedCards = const [];
   int lastPoints = 0;
   int lastCombo = 1;
 
@@ -54,16 +91,21 @@ class MatchingGame {
   int get matchedPairs => isMatched.where((m) => m).length ~/ 2;
   int get pairsLeft => level.pairs - matchedPairs;
 
+  int get totalSeconds => level.seconds + bonusSeconds;
+
   /// 過關星數：剩餘時間超過一半 3 星、超過 1/4 兩星，其餘 1 星。
   int get stars {
     if (!isWon) return 0;
-    final ratio = timeLeft / level.seconds;
+    final ratio = timeLeft / totalSeconds;
     if (ratio > 0.5) return 3;
     if (ratio > 0.25) return 2;
     return 1;
   }
 
-  int get coinsEarned => isWon ? (score / 10).round() : 0;
+  int get coinsEarned {
+    if (!isWon) return 0;
+    return (score / 10 * coinMultiplier * (luckyCatActive ? luckyCatMultiplier : 1)).round();
+  }
 
   void reset() {
     final picks = (_pool.toList()..shuffle(_random)).take(level.pairs).toList();
@@ -75,14 +117,20 @@ class MatchingGame {
     steps = 0;
     score = 0;
     combo = 1;
-    timeLeft = level.seconds;
+    timeLeft = totalSeconds;
     timeBonus = 0;
     isEnded = false;
     isWon = false;
     hintUsed = false;
     isPeeking = false;
     revived = false;
+    mistakes = 0;
+    bestCombo = 0;
+    usedItems = {};
+    charmActive = false;
+    luckyCatActive = false;
     lastMatched = null;
+    lastMatchedCards = const [];
     lastPoints = 0;
     lastCombo = 1;
   }
@@ -100,28 +148,67 @@ class MatchingGame {
     }
 
     if (cards[first] == cards[index]) {
-      isMatched[first] = true;
-      isMatched[index] = true;
-      firstPickedIndex = null;
-      lastMatched = cards[index];
-      lastCombo = combo;
-      lastPoints = pointsPerMatch * combo;
-      score += lastPoints;
-      combo = min(combo + 1, maxCombo);
-
-      if (pairsLeft == 0) {
-        isEnded = true;
-        isWon = true;
-        timeBonus = timeLeft * bonusPerSecond;
-        score += timeBonus;
-        return PickResult.finished;
-      }
-      return PickResult.matched;
+      return _match(first, index);
     }
 
     secondPickedIndex = index;
-    combo = 1;
+    mistakes++;
+    if (charmActive) {
+      charmActive = false; // 護身符擋下這次翻錯，連擊不中斷
+    } else {
+      combo = 1;
+    }
     return PickResult.mismatched;
+  }
+
+  PickResult _match(int a, int b) {
+    isOpen[a] = true;
+    isOpen[b] = true;
+    isMatched[a] = true;
+    isMatched[b] = true;
+    firstPickedIndex = null;
+    lastMatched = cards[b];
+    lastMatchedCards = [a, b];
+    lastCombo = combo;
+    bestCombo = max(bestCombo, combo);
+    lastPoints = pointsPerMatch * combo;
+    score += lastPoints;
+    combo = min(combo + 1, comboCap);
+
+    if (pairsLeft == 0) {
+      isEnded = true;
+      isWon = true;
+      timeBonus = timeLeft * bonusPerSecond;
+      score += timeBonus;
+      return PickResult.finished;
+    }
+    return PickResult.matched;
+  }
+
+  bool canUseItem(ItemType type) {
+    if (isEnded || usedItems.contains(type)) return false;
+    return type != ItemType.magnifier || !isLocked;
+  }
+
+  /// 使用道具。不能用時回傳 false。放大鏡用完要看 [isWon] 判斷是否過關。
+  bool useItem(ItemType type) {
+    if (!canUseItem(type)) return false;
+    usedItems.add(type);
+    switch (type) {
+      case ItemType.magnifier:
+        // 已經翻開一張就配那一張，否則配第一組還沒配對的牌
+        final a = firstPickedIndex ?? isMatched.indexOf(false);
+        final b = List.generate(cards.length, (i) => i)
+            .firstWhere((i) => i != a && !isMatched[i] && cards[i] == cards[a]);
+        _match(a, b);
+      case ItemType.hourglass:
+        timeLeft += hourglassSeconds;
+      case ItemType.charm:
+        charmActive = true;
+      case ItemType.luckyCat:
+        luckyCatActive = true;
+    }
+    return true;
   }
 
   /// 翻錯後把兩張牌蓋回去（畫面會在延遲後呼叫）。

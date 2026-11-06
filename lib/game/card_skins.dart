@@ -10,6 +10,7 @@ class CardSkin {
     required this.edge,
     required this.mark,
     required this.markColor,
+    this.achievementOnly = false,
   });
 
   /// 存檔用的識別碼，上架後不要改。
@@ -22,6 +23,9 @@ class CardSkin {
   /// 卡背中間的字或圖案。
   final String mark;
   final Color markColor;
+
+  /// 只能靠成就取得，不能用金幣買。
+  final bool achievementOnly;
 }
 
 const defaultSkinId = 'lantern';
@@ -71,6 +75,26 @@ const cardSkins = <CardSkin>[
     edge: Color(0xFFA9714B),
     mark: '🧋',
     markColor: Color(0xFFFBF1DC),
+  ),
+  CardSkin(
+    id: 'tour',
+    name: '全台走透透',
+    price: 0,
+    base: Color(0xFF1F6F8B),
+    edge: Color(0xFF4FA3BF),
+    mark: '台',
+    markColor: Color(0xFFFBF1DC),
+    achievementOnly: true,
+  ),
+  CardSkin(
+    id: 'god',
+    name: '夜市之神',
+    price: 0,
+    base: Color(0xFF1B1430),
+    edge: Color(0xFFFFB547),
+    mark: '神',
+    markColor: Color(0xFFFFB547),
+    achievementOnly: true,
   ),
 ];
 
