@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/ad_service.dart';
 import 'services/progress_store.dart';
 import 'services/sound_service.dart';
@@ -12,16 +13,26 @@ Future<void> main() async {
   final ads = AdMobService();
   ads.init(); // 不等廣告載入完，先讓畫面出來
   final sounds = AudioSoundService(muted: store.muted, musicOn: store.musicOn);
-  sounds.init();
-  runApp(NightMarketMatchApp(store: store, ads: ads, sounds: sounds));
+  // 音效在開場動畫播放時載入，動畫播完、音效也好了才進首頁
+  final soundsReady = sounds.init();
+  runApp(NightMarketMatchApp(store: store, ads: ads, sounds: sounds, loading: soundsReady));
 }
 
 class NightMarketMatchApp extends StatefulWidget {
-  const NightMarketMatchApp({super.key, required this.store, required this.ads, required this.sounds});
+  const NightMarketMatchApp({
+    super.key,
+    required this.store,
+    required this.ads,
+    required this.sounds,
+    this.loading,
+  });
 
   final ProgressStore store;
   final AdService ads;
   final SoundService sounds;
+
+  /// 開場動畫期間要等完的載入工作。
+  final Future<void>? loading;
 
   @override
   State<NightMarketMatchApp> createState() => _NightMarketMatchAppState();
@@ -64,7 +75,10 @@ class _NightMarketMatchAppState extends State<NightMarketMatchApp> with WidgetsB
           brightness: Brightness.dark,
         ),
       ),
-      home: HomeScreen(store: widget.store, ads: widget.ads, sounds: widget.sounds),
+      home: SplashScreen(
+        loading: widget.loading,
+        next: (_) => HomeScreen(store: widget.store, ads: widget.ads, sounds: widget.sounds),
+      ),
     );
   }
 }

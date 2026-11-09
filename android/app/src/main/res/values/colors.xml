@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#16121F</color>
+    <!-- 啟動畫面的夜空色，跟 Flutter 開場動畫一致，切換時才不會閃白 -->
+    <color name="launch_background">#16121F</color>
 </resources>

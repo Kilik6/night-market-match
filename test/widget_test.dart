@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -10,6 +11,7 @@ import 'package:night_market_match/game/matching_game.dart';
 import 'package:night_market_match/game/night_market_data.dart';
 import 'package:night_market_match/screens/game_screen.dart';
 import 'package:night_market_match/screens/home_screen.dart';
+import 'package:night_market_match/screens/splash_screen.dart';
 import 'package:night_market_match/services/ad_service.dart';
 import 'package:night_market_match/services/progress_store.dart';
 import 'package:night_market_match/services/sound_service.dart';
@@ -1059,6 +1061,96 @@ void main() {
         expect(rect.bottom, lessThan(667));
         expect(rect.width, greaterThan(36), reason: '卡片太小不好點');
       }
+    });
+  });
+
+  group('開場動畫', () {
+    /// 開場動畫，播完後進首頁。images 給空的，測試環境不讀圖片檔。
+    Future<void> pumpSplash(WidgetTester tester, {Future<void>? loading}) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: SplashScreen(
+          loading: loading,
+          images: const [],
+          next: (_) => HomeScreen(store: store, ads: ads, sounds: sounds, random: Random(1)),
+        ),
+      ));
+    }
+
+    /// 載入完成後還有「開市囉！」停留一秒和淡入，等這段跑完。
+    Future<void> finishTransition(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 1050));
+      await tester.pump(const Duration(milliseconds: 700));
+    }
+
+    testWidgets('載入很快時，動畫播完才進首頁', (tester) async {
+      await pumpSplash(tester, loading: Future.value());
+      expect(find.text('夜市翻牌'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 2000));
+      expect(find.byKey(const ValueKey('start')), findsNothing, reason: '動畫還沒播完');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('開市囉！'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(find.text('開市囉！'), findsOneWidget, reason: '要停留約一秒');
+      expect(find.byKey(const ValueKey('start')), findsNothing);
+      await finishTransition(tester);
+      expect(find.byKey(const ValueKey('start')), findsOneWidget);
+      expect(find.byKey(const ValueKey('splash')), findsNothing);
+    });
+
+    testWidgets('載入比動畫慢時，停在準備中直到載入完成', (tester) async {
+      final loading = Completer<void>();
+      await pumpSplash(tester, loading: loading.future);
+      await tester.pump(const Duration(milliseconds: 4000));
+      expect(find.textContaining('攤位準備中'), findsOneWidget);
+      expect(find.byKey(const ValueKey('start')), findsNothing);
+      loading.complete();
+      await tester.pump();
+      await finishTransition(tester);
+      expect(find.byKey(const ValueKey('start')), findsOneWidget);
+    });
+
+    testWidgets('載入卡住時，最多等 6 秒就進首頁', (tester) async {
+      await pumpSplash(tester, loading: Completer<void>().future);
+      await tester.pump(const Duration(milliseconds: 5900));
+      expect(find.byKey(const ValueKey('start')), findsNothing);
+      await tester.pump(const Duration(milliseconds: 200));
+      await finishTransition(tester);
+      expect(find.byKey(const ValueKey('start')), findsOneWidget);
+    });
+
+    testWidgets('載入失敗也照樣進首頁', (tester) async {
+      final loading = Completer<void>();
+      await pumpSplash(tester, loading: loading.future);
+      loading.completeError(Exception('音效壞了'));
+      await tester.pump(const Duration(milliseconds: 2500));
+      await finishTransition(tester);
+      expect(find.byKey(const ValueKey('start')), findsOneWidget);
+    });
+
+    testWidgets('開啟減少動態效果時直接顯示完整畫面', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: SplashScreen(images: const [], next: (_) => const SizedBox()),
+        ),
+      ));
+      await tester.pump();
+      expect(find.text('夜市翻牌'), findsOneWidget);
+      expect(find.textContaining('攤位準備中'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('小螢幕也不會超出畫面', (tester) async {
+      await pumpSplash(tester, loading: Future.value());
+      tester.view.physicalSize = const Size(640, 1136);
+      tester.view.devicePixelRatio = 2;
+      for (var ms = 0; ms < 2400; ms += 300) {
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.takeException(), isNull, reason: '第 $ms 毫秒');
+      }
+      await finishTransition(tester);
     });
   });
 }
