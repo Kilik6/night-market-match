@@ -17,11 +17,12 @@ import 'daily_screen.dart';
 import 'endless_screen.dart';
 import 'food_guide_screen.dart';
 import 'game_screen.dart';
+import 'how_to_play_screen.dart';
 import 'level_select_screen.dart';
 import 'settings_screen.dart';
 import 'shop_screen.dart';
 
-/// 首頁：開始遊戲、選擇夜市、卡背商店、設定。
+/// 首頁：夜市大胃王、夜市走透透（進選擇夜市再開始闖關）、卡背商店、每日任務、成就、圖鑑、玩法說明、設定。
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.store, required this.ads, required this.sounds, this.random});
 
@@ -102,34 +103,34 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 10),
             MenuButton(
               key: const ValueKey('start'),
-              icon: Icons.play_arrow_rounded,
-              label: '開始遊戲',
+              icon: Icons.directions_walk_rounded,
+              label: '夜市走透透',
               subtitle: '第 ${_latestLevel + 1} 攤・${latest.name}',
-              onPressed: () => _open(_game(_latestLevel)),
+              // 先到選擇夜市的列表，選好一攤才開始
+              onPressed: () => _open(LevelSelectScreen(store: _store, sounds: widget.sounds, gameBuilder: _game)),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                _tile('levels', Icons.map_rounded, '選擇夜市',
-                    () => _open(LevelSelectScreen(store: _store, sounds: widget.sounds, gameBuilder: _game))),
-                const SizedBox(width: 10),
                 _tile('shop', Icons.storefront_rounded, '夜市商店',
                     () => _open(ShopScreen(store: _store, sounds: widget.sounds))),
                 const SizedBox(width: 10),
                 _tile('daily', Icons.today_rounded, '每日任務',
                     () => _open(DailyScreen(store: _store, sounds: widget.sounds)),
                     dot: _store.hasClaimableDaily),
+                const SizedBox(width: 10),
+                _tile('achievements', Icons.emoji_events_rounded, '成就',
+                    () => _open(AchievementsScreen(store: _store, sounds: widget.sounds)),
+                    dot: _store.hasClaimableAchievement),
               ],
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                _tile('achievements', Icons.emoji_events_rounded, '成就',
-                    () => _open(AchievementsScreen(store: _store, sounds: widget.sounds)),
-                    dot: _store.hasClaimableAchievement),
-                const SizedBox(width: 10),
                 _tile('guide', Icons.menu_book_rounded, '小吃圖鑑',
                     () => _open(FoodGuideScreen(store: _store))),
+                const SizedBox(width: 10),
+                _tile('howto', Icons.lightbulb_rounded, '玩法說明', () => _open(const HowToPlayScreen())),
                 const SizedBox(width: 10),
                 _tile('settings', Icons.settings_rounded, '設定',
                     () => _open(SettingsScreen(store: _store, sounds: widget.sounds))),

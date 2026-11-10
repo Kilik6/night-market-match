@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../game/night_market_data.dart';
@@ -23,19 +21,6 @@ class LevelSelectScreen extends StatefulWidget {
 }
 
 class _LevelSelectScreenState extends State<LevelSelectScreen> {
-  /// 每一列大約的高度（含間距），用來一打開就捲到最新解鎖的那一攤。
-  static const _rowExtent = 82.0;
-
-  late final _scroll = ScrollController(
-    initialScrollOffset: max(0, widget.store.unlocked - 3) * _rowExtent,
-  );
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
   void _toast(String text) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -55,7 +40,6 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
       title: '選擇夜市',
       actions: [Padding(padding: const EdgeInsets.only(right: 16), child: Center(child: CoinBadge(coins: store.coins)))],
       child: ListView.separated(
-        controller: _scroll,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         itemCount: levels.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),

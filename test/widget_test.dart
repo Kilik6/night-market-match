@@ -899,7 +899,7 @@ void main() {
   });
 
   group('畫面流程', () {
-    testWidgets('首頁：開始遊戲進到最新解鎖的一攤，並顯示總星數和金幣', (tester) async {
+    testWidgets('首頁：夜市走透透先進選擇夜市再開始，並顯示總星數和金幣', (tester) async {
       await pumpHome(tester, saved: {'unlocked': 2, 'coins': 123, 'stars_0': 3});
       expect(find.text('夜市翻牌'), findsOneWidget);
       expect(find.text('第 2 攤・城隍廟夜市'), findsOneWidget);
@@ -907,13 +907,57 @@ void main() {
       expect(find.text('🪙 123'), findsOneWidget);
 
       await tapAndSettle(tester, find.byKey(const ValueKey('start')));
+      expect(find.text('選擇夜市'), findsOneWidget, reason: '先進選擇夜市，不會直接開始');
+      expect(find.text('夜'), findsNothing);
+      await tapAndSettle(tester, find.byKey(const ValueKey('level_1')));
       expect(find.text('城隍廟夜市'), findsOneWidget);
       expect(find.text('夜'), findsNWidgets(16));
     });
 
-    testWidgets('遊戲中按返回會先確認；選繼續玩就留下，選離開就回首頁', (tester) async {
+    testWidgets('首頁沒有選擇夜市的格子，6 格排成兩列三格', (tester) async {
+      await pumpHome(tester);
+      expect(find.byKey(const ValueKey('levels')), findsNothing);
+      const keys = ['shop', 'daily', 'achievements', 'guide', 'howto', 'settings'];
+      final rects = [for (final k in keys) tester.getRect(find.byKey(ValueKey(k)))];
+      for (var i = 0; i < 3; i++) {
+        expect(rects[i].top, rects[0].top, reason: '第一列：${keys[i]}');
+        expect(rects[i + 3].top, rects[3].top, reason: '第二列：${keys[i + 3]}');
+        expect(rects[i + 3].width, closeTo(rects[i].width, 0.5), reason: '兩列格子一樣寬');
+      }
+      expect(rects[3].top, greaterThan(rects[0].bottom));
+    });
+
+    testWidgets('玩法說明：兩種模式和道具都有說明，數值跟遊戲規則一致', (tester) async {
+      await pumpHome(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('howto')));
+      expect(find.text('玩法說明'), findsOneWidget);
+      for (final key in ['howto_basic', 'howto_tour', 'howto_endless']) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
+      }
+      expect(find.textContaining('每組得分 100 × 連擊（最高 ×5）'), findsOneWidget);
+      expect(find.textContaining('金幣是分數 ÷ 20'), findsOneWidget);
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('howto_more')), 300);
+      for (final type in ItemType.values) {
+        expect(find.text('${type.emoji} ${type.label}：${type.description}'), findsOneWidget, reason: type.name);
+      }
+      expect(find.textContaining('每升一級，每局時間 +2 秒'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('玩法說明在小螢幕上不會跑版', (tester) async {
+      await pumpHome(tester);
+      tester.view.physicalSize = const Size(640, 1136);
+      tester.view.devicePixelRatio = 2;
+      await tapAndSettle(tester, find.byKey(const ValueKey('howto')));
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('howto_more')), 300);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('遊戲中按返回會先確認；選繼續玩就留下，選離開就回選擇夜市', (tester) async {
       await pumpHome(tester);
       await tapAndSettle(tester, find.byKey(const ValueKey('start')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('level_0')));
 
       await tapAndSettle(tester, find.byKey(const ValueKey('back')));
       expect(find.text('離開這一攤？'), findsOneWidget);
@@ -925,12 +969,12 @@ void main() {
 
       await tapAndSettle(tester, find.byKey(const ValueKey('back')));
       await tapAndSettle(tester, find.byKey(const ValueKey('confirm_leave')));
-      expect(find.byKey(const ValueKey('start')), findsOneWidget);
+      expect(find.text('選擇夜市'), findsOneWidget);
     });
 
     testWidgets('選擇夜市：上鎖的會提示，過關後回列表星數和解鎖會更新', (tester) async {
       await pumpHome(tester);
-      await tapAndSettle(tester, find.byKey(const ValueKey('levels')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('start')));
       expect(find.text('選擇夜市'), findsOneWidget);
       expect(find.text('南機場夜市・台北'), findsOneWidget);
 
@@ -1060,10 +1104,13 @@ void main() {
       expect(find.text('🪙 0'), findsOneWidget);
     });
   
-    testWidgets('選擇夜市：18 攤可以捲動，打開時會捲到最新解鎖的那一攤', (tester) async {
+    testWidgets('選擇夜市：打開時在最上面，18 攤可以捲動', (tester) async {
       await pumpHome(tester, saved: {'unlocked': 15});
-      await tapAndSettle(tester, find.byKey(const ValueKey('levels')));
-      expect(find.text('六合夜市・高雄'), findsOneWidget); // 第 15 攤在畫面內
+      await tapAndSettle(tester, find.byKey(const ValueKey('start')));
+      expect(find.text('南機場夜市・台北'), findsOneWidget, reason: '從第 1 攤開始，不會跳到中間');
+      expect(find.text('六合夜市・高雄'), findsNothing);
+      await tester.scrollUntilVisible(find.text('六合夜市・高雄'), 300);
+      await settle(tester);
       await tapAndSettle(tester, find.byKey(const ValueKey('level_14')));
       expect(find.text('六合夜市'), findsOneWidget);
     });
