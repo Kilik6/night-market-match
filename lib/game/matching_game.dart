@@ -55,6 +55,12 @@ class MatchingGame {
   bool hintUsed = false;
   bool isPeeking = false;
 
+  /// 開局準備中（先顯示提示、再翻開全部牌讓玩家記），這段時間不能翻牌、不倒數、不能偷看。
+  bool isPreviewing = false;
+
+  /// 準備的後半段：全部牌翻開讓玩家記位置。
+  bool previewCardsUp = false;
+
   /// 看廣告「+15 秒繼續」：每局一次。
   bool revived = false;
   static const reviveSeconds = 15;
@@ -83,9 +89,9 @@ class MatchingGame {
   int lastCombo = 1;
 
   /// 兩張翻錯、等待蓋回去的期間為 true，這段時間不能再翻牌。
-  bool get isLocked => secondPickedIndex != null || isPeeking;
+  bool get isLocked => secondPickedIndex != null || isPeeking || isPreviewing;
 
-  bool get canPeek => !hintUsed && !isEnded;
+  bool get canPeek => !hintUsed && !isEnded && !isPreviewing;
   bool get canRevive => isEnded && !isWon && !revived;
 
   int get matchedPairs => isMatched.where((m) => m).length ~/ 2;
@@ -123,6 +129,8 @@ class MatchingGame {
     isWon = false;
     hintUsed = false;
     isPeeking = false;
+    isPreviewing = false;
+    previewCardsUp = false;
     revived = false;
     mistakes = 0;
     bestCombo = 0;
@@ -222,6 +230,22 @@ class MatchingGame {
     secondPickedIndex = null;
   }
 
+  /// 開局準備：牌先蓋著，畫面顯示提示後呼叫 [showPreviewCards] 翻開全部牌，
+  /// 記憶時間結束呼叫 [endPreview]。不會用掉偷看的機會。
+  void startPreview() {
+    isPreviewing = true;
+    previewCardsUp = false;
+  }
+
+  void showPreviewCards() {
+    if (isPreviewing) previewCardsUp = true;
+  }
+
+  void endPreview() {
+    isPreviewing = false;
+    previewCardsUp = false;
+  }
+
   /// 開始偷看：先把翻錯等待中的牌蓋回去，再讓畫面顯示全部牌面。
   bool startPeek() {
     if (!canPeek) return false;
@@ -234,7 +258,7 @@ class MatchingGame {
   void endPeek() => isPeeking = false;
 
   /// 畫面要不要顯示這張牌的正面。
-  bool isFaceUp(int index) => isPeeking || isOpen[index];
+  bool isFaceUp(int index) => isPeeking || previewCardsUp || isOpen[index];
 
   /// 時間到之後看廣告，多給 15 秒繼續。
   bool revive() {
@@ -248,7 +272,7 @@ class MatchingGame {
 
   /// 每秒呼叫一次。時間到回傳 true。
   bool tick() {
-    if (isEnded) return false;
+    if (isEnded || isPreviewing) return false;
     timeLeft = max(0, timeLeft - 1);
     if (timeLeft == 0) {
       isEnded = true;

@@ -10,6 +10,7 @@ import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
 import '../widgets/food_icon.dart';
+import '../widgets/game_widgets.dart';
 import '../widgets/lanterns.dart';
 import '../widgets/night_scaffold.dart';
 import 'achievements_screen.dart';
@@ -24,12 +25,22 @@ import 'shop_screen.dart';
 
 /// 首頁：夜市大胃王、夜市走透透（進選擇夜市再開始闖關）、卡背商店、每日任務、成就、圖鑑、玩法說明、設定。
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.store, required this.ads, required this.sounds, this.random});
+  const HomeScreen({
+    super.key,
+    required this.store,
+    required this.ads,
+    required this.sounds,
+    this.random,
+    this.previewSeconds = previewMemorizeSeconds,
+  });
 
   final ProgressStore store;
   final AdService ads;
   final SoundService sounds;
   final Random? random;
+
+  /// 開局翻開全部牌的秒數，傳給兩種模式的遊戲畫面。
+  final int previewSeconds;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -63,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ads: widget.ads,
         sounds: widget.sounds,
         random: widget.random,
+        previewSeconds: widget.previewSeconds,
       );
 
   @override
@@ -98,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ads: widget.ads,
                 sounds: widget.sounds,
                 random: widget.random,
+                previewSeconds: widget.previewSeconds,
               )),
             ),
             const SizedBox(height: 10),

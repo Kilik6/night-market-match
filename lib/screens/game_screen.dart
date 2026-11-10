@@ -26,7 +26,11 @@ class GameScreen extends StatefulWidget {
     required this.ads,
     required this.sounds,
     this.random,
+    this.previewSeconds = previewMemorizeSeconds,
   });
+
+  /// 開局翻開全部牌讓玩家記位置的秒數，0 表示不翻。
+  final int previewSeconds;
 
   /// 從哪一攤開始（過關後可以直接前往下一攤）。
   final int levelIndex;
@@ -63,6 +67,13 @@ class _GameScreenState extends State<GameScreen> {
   Timer? _clock;
   Timer? _hideTimer;
   Timer? _peekTimer;
+  Timer? _previewTimer;
+
+  /// 開局提示框還剩幾秒。
+  int _hintLeft = 0;
+
+  /// 開局翻牌記憶還剩幾秒。
+  int _previewLeft = 0;
 
   /// 畫面上進行中的配對特效。
   final List<_Burst> _bursts = [];
@@ -94,6 +105,7 @@ class _GameScreenState extends State<GameScreen> {
     _clock?.cancel();
     _hideTimer?.cancel();
     _peekTimer?.cancel();
+    _previewTimer?.cancel();
   }
 
   void _startLevel(int index) {
@@ -110,7 +122,42 @@ class _GameScreenState extends State<GameScreen> {
     );
     _achievedAtStart = {for (final a in achievements) if (_store.isAchieved(a)) a.id};
     _message = '翻兩張一樣的小吃就能配對';
-    _startClock();
+    _startPreview();
+  }
+
+  /// 開局先把牌全部翻開 [previewSeconds] 秒讓玩家記位置，蓋回去後才開始倒數。
+  void _startPreview() {
+    if (widget.previewSeconds <= 0) {
+      _startClock();
+      return;
+    }
+    // 第一段：牌蓋著，牌桌中央顯示提示框
+    _game.startPreview();
+    _hintLeft = previewHintSeconds;
+    _previewLeft = widget.previewSeconds;
+    _message = '準備開始…';
+    _previewTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _paused) return; // 問要不要離開時先停住
+      if (_hintLeft > 0) {
+        setState(() {
+          _hintLeft--;
+          // 第二段：提示框消失、全部牌翻開，上方倒數
+          if (_hintLeft == 0) {
+            _game.showPreviewCards();
+            _message = '倒數結束就會蓋牌';
+          }
+        });
+        return;
+      }
+      setState(() => _previewLeft--);
+      if (_previewLeft > 0) return;
+      timer.cancel();
+      setState(() {
+        _game.endPreview();
+        _message = '翻兩張一樣的小吃就能配對';
+      });
+      _startClock();
+    });
   }
 
   void _startClock() {
@@ -438,7 +485,7 @@ class _GameScreenState extends State<GameScreen> {
             children: [
               _buildSign(),
               const SizedBox(height: 12),
-              _buildHud(),
+              _buildHudOrCountdown(),
               const SizedBox(height: 8),
               _buildTimeBar(),
               const SizedBox(height: 12),
@@ -530,6 +577,22 @@ class _GameScreenState extends State<GameScreen> {
           CoinBadge(coins: _store.coins),
         ],
       ),
+    );
+  }
+
+  /// 開局翻牌記憶時，時間／分數列換成倒數橫幅（大小一樣，牌桌不會跟著移動）。
+  Widget _buildHudOrCountdown() {
+    return Stack(
+      children: [
+        Visibility(
+          visible: !_game.previewCardsUp,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: _buildHud(),
+        ),
+        if (_game.previewCardsUp) Positioned.fill(child: PreviewCountdown(secondsLeft: _previewLeft)),
+      ],
     );
   }
 
@@ -635,6 +698,13 @@ class _GameScreenState extends State<GameScreen> {
                     ),
                 ],
               ),
+              // 開局提示框：牌桌正中央
+              if (_game.isPreviewing && !_game.previewCardsUp)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(child: PreviewHint(memorizeSeconds: widget.previewSeconds)),
+                  ),
+                ),
               for (final burst in _bursts)
                 Positioned(
                   left: cardCenter(burst.card).dx - MatchBurst.size / 2,

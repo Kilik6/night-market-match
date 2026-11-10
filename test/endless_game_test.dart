@@ -352,6 +352,24 @@ void main() {
       expectBoardHealthy(g);
     });
 
+    test('開局準備：先蓋著提示、再全部翻開；期間不能翻牌、不倒數、不能偷看，也不會用掉偷看', () {
+      final g = EndlessGame(random: Random(15));
+      g.startPreview();
+      expect(List.generate(16, g.isFaceUp).any((up) => up), isFalse, reason: '提示階段牌還蓋著');
+      expect(g.pick(0), PickResult.ignored);
+      expect(g.tick(), isFalse);
+      g.showPreviewCards();
+      expect(List.generate(16, g.isFaceUp).every((up) => up), isTrue);
+      expect(g.pick(0), PickResult.ignored);
+      expect(g.tick(), isFalse);
+      expect(g.timeLeft, 60);
+      expect(g.canPeek, isFalse);
+      g.endPreview();
+      expect(List.generate(16, g.isFaceUp).any((up) => up), isFalse);
+      expect(g.canPeek, isTrue, reason: '開局翻牌不會用掉偷看');
+      expect(g.pick(0), PickResult.firstPicked);
+    });
+
     test('偷看每局一次，偷看中不能翻牌', () {
       final g = EndlessGame(random: Random(14));
       expect(g.startPeek(), isTrue);

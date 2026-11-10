@@ -165,3 +165,118 @@ class ResultDialog extends StatelessWidget {
     );
   }
 }
+
+/// 開局翻牌時蓋在時間／分數列上的倒數：「記住所有卡牌！」加上會彈跳的大數字。
+class PreviewCountdown extends StatelessWidget {
+  const PreviewCountdown({super.key, required this.secondsLeft});
+
+  final int secondsLeft;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    return Container(
+      key: const ValueKey('preview_countdown'),
+      decoration: BoxDecoration(
+        color: NightColors.stall,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: NightColors.glow, width: 1.5),
+        boxShadow: [BoxShadow(color: NightColors.glow.withValues(alpha: 0.3), blurRadius: 16)],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          const Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '記住所有卡牌！',
+                style: TextStyle(color: NightColors.paper, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 2),
+              ),
+            ),
+          ),
+          // 每換一個數字就重建，從大縮回正常大小
+          TweenAnimationBuilder<double>(
+            key: ValueKey(secondsLeft),
+            tween: Tween(begin: reduceMotion ? 1 : 1.8, end: 1),
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutBack,
+            builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+            child: Text(
+              '$secondsLeft',
+              key: const ValueKey('preview_seconds'),
+              style: TextStyle(
+                color: NightColors.glow,
+                fontSize: 30,
+                height: 1,
+                fontWeight: FontWeight.w900,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                shadows: [Shadow(color: NightColors.glow.withValues(alpha: 0.7), blurRadius: 14)],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 開局提示要顯示幾秒，之後才翻開全部牌讓玩家記。
+const previewHintSeconds = 5;
+
+/// 開局翻開全部牌讓玩家記位置的秒數（上方倒數）。
+const previewMemorizeSeconds = 5;
+
+/// 開局時在牌桌正中央跳出的提示框：「記住所有卡牌！」。
+class PreviewHint extends StatelessWidget {
+  const PreviewHint({super.key, required this.memorizeSeconds});
+
+  /// 接下來翻開讓玩家記的秒數。
+  final int memorizeSeconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutBack,
+      builder: (context, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.scale(scale: 0.7 + 0.3 * t, child: child),
+      ),
+      child: Container(
+        key: const ValueKey('preview_hint'),
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
+        // 半透明，後面蓋著的卡牌會隱約透出來
+        decoration: BoxDecoration(
+          color: NightColors.paper.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: NightColors.glow.withValues(alpha: 0.7), width: 2),
+          boxShadow: [BoxShadow(color: NightColors.glow.withValues(alpha: 0.25), blurRadius: 24)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('👀', style: TextStyle(fontSize: 36)),
+            const SizedBox(height: 6),
+            const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '記住所有卡牌！',
+                style: TextStyle(color: NightColors.ink, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 2),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '卡牌即將翻開 $memorizeSeconds 秒',
+              style: TextStyle(color: NightColors.ink.withValues(alpha: 0.7), fontSize: 15),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
