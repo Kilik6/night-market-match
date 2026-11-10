@@ -14,6 +14,7 @@ import '../widgets/lanterns.dart';
 import '../widgets/night_scaffold.dart';
 import 'achievements_screen.dart';
 import 'daily_screen.dart';
+import 'endless_screen.dart';
 import 'food_guide_screen.dart';
 import 'game_screen.dart';
 import 'level_select_screen.dart';
@@ -86,8 +87,21 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Expanded(child: _Hero(skin: skinById(_store.equippedSkin))),
             MenuButton(
-              key: const ValueKey('start'),
+              key: const ValueKey('endless'),
               primary: true,
+              icon: Icons.local_fire_department_rounded,
+              label: EndlessScreen.title,
+              subtitle: _store.endlessBest > 0 ? '最高分 ${_store.endlessBest}' : '無盡挑戰，吃越多分越高',
+              onPressed: () => _open(EndlessScreen(
+                store: _store,
+                ads: widget.ads,
+                sounds: widget.sounds,
+                random: widget.random,
+              )),
+            ),
+            const SizedBox(height: 10),
+            MenuButton(
+              key: const ValueKey('start'),
               icon: Icons.play_arrow_rounded,
               label: '開始遊戲',
               subtitle: '第 ${_latestLevel + 1} 攤・${latest.name}',
@@ -182,7 +196,8 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
-      final cardW = min(c.maxWidth * 0.26, c.maxHeight * 0.36);
+      // 標題和副標題約佔 90 高，卡片區（含上方間距）約是卡高的 1.4 倍，剩下的高度才給卡片
+      final cardW = max(0.0, min(c.maxWidth * 0.26, (c.maxHeight - 90) / (4 / 3 * 1.4)));
       final cardH = cardW * 4 / 3;
       Widget card(double angle, double dx, Widget child) => Transform.translate(
             offset: Offset(dx, 0),
@@ -192,62 +207,70 @@ class _Hero extends StatelessWidget {
               child: SizedBox(width: cardW, height: cardH, child: child),
             ),
           );
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '夜市翻牌',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: NightColors.glow,
-              fontSize: min(56, c.maxWidth * 0.14),
-              fontWeight: FontWeight.w800,
-              letterSpacing: 6,
-              shadows: [Shadow(color: NightColors.glow.withValues(alpha: 0.6), blurRadius: 18)],
+      // 保險：字級被系統放大等情況還是放不下時，整塊等比縮小
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '夜市翻牌',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: NightColors.glow,
+                fontSize: min(56, c.maxWidth * 0.14),
+                fontWeight: FontWeight.w800,
+                letterSpacing: 6,
+                shadows: [Shadow(color: NightColors.glow.withValues(alpha: 0.6), blurRadius: 18)],
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '逛遍台灣夜市，記住每一攤的小吃',
-            style: TextStyle(color: NightColors.mist, fontSize: 14, letterSpacing: 1),
-          ),
-          SizedBox(height: cardH * 0.25),
-          SizedBox(
-            height: cardH * 1.15,
-            child: Stack(
-              alignment: Alignment.bottomCenter,
-              children: [
-                card(-0.28, -cardW * 0.62, CardBack(skin: skin, width: cardW)),
-                card(0.28, cardW * 0.62, CardBack(skin: skin, width: cardW)),
-                card(
-                  0,
-                  0,
-                  Container(
-                    decoration: BoxDecoration(
-                      color: NightColors.paper,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, 6))],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FoodIcon(food: foods[1], size: cardW * 0.42),
-                        Text(
-                          '珍珠奶茶',
-                          style: TextStyle(
-                            color: NightColors.ink,
-                            fontWeight: FontWeight.w700,
-                            fontSize: max(10, cardW * 0.14),
+            const SizedBox(height: 4),
+            const Text(
+              '逛遍台灣夜市，記住每一攤的小吃',
+              style: TextStyle(color: NightColors.mist, fontSize: 14, letterSpacing: 1),
+            ),
+            SizedBox(height: cardH * 0.25),
+            SizedBox(
+              height: cardH * 1.15,
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  card(-0.28, -cardW * 0.62, CardBack(skin: skin, width: cardW)),
+                  card(0.28, cardW * 0.62, CardBack(skin: skin, width: cardW)),
+                  card(
+                    0,
+                    0,
+                    Container(
+                      decoration: BoxDecoration(
+                        color: NightColors.paper,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, 6))],
+                      ),
+                      // 小螢幕上卡片很小時，圖和字一起縮小
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FoodIcon(food: foods[1], size: cardW * 0.42),
+                          Text(
+                            '珍珠奶茶',
+                            style: TextStyle(
+                              color: NightColors.ink,
+                              fontWeight: FontWeight.w700,
+                              fontSize: max(10, cardW * 0.14),
+                            ),
                           ),
+                        ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     });
   }

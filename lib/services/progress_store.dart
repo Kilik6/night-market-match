@@ -31,6 +31,7 @@ class ProgressStore {
   static const _dailyClaimedKey = 'daily_claimed';
   static const _checkInDateKey = 'checkin_last';
   static const _checkInStreakKey = 'checkin_streak';
+  static const _endlessBestKey = 'endless_best_score';
   static String _starsKey(int level) => 'stars_$level';
   static String _itemKey(ItemType type) => 'item_${type.name}';
   static String _gearKey(GearType type) => 'gear_${type.name}';
@@ -174,6 +175,17 @@ class ProgressStore {
     }
   }
 
+  // ---------- 夜市大胃王（無盡模式） ----------
+
+  int get endlessBest => _prefs.getInt(_endlessBestKey) ?? 0;
+
+  /// 一輪結束時呼叫。回傳是否刷新最高分。
+  Future<bool> recordEndlessScore(int score) async {
+    if (score <= endlessBest) return false;
+    await _prefs.setInt(_endlessBestKey, score);
+    return true;
+  }
+
   // ---------- 成就 ----------
 
   int metricValue(Metric metric) => switch (metric) {
@@ -291,6 +303,7 @@ class ProgressStore {
       _equippedSkinKey,
       _foodsKey,
       _achievementsKey,
+      _endlessBestKey,
       ...prefixed,
     ]) {
       await _prefs.remove(k);

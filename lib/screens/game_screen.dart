@@ -13,6 +13,7 @@ import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
+import '../widgets/game_widgets.dart';
 import '../widgets/match_effects.dart';
 import '../widgets/night_scaffold.dart';
 
@@ -39,8 +40,6 @@ class GameScreen extends StatefulWidget {
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
-
-enum _Choice { primary, watchAd, leave }
 
 /// 一個進行中的配對特效。
 class _Burst {
@@ -346,10 +345,10 @@ class _GameScreenState extends State<GameScreen> {
     await _store.recordWin(stars: _game.stars, mistakes: _game.mistakes);
     if (!mounted) return;
     final newAchievements = achievements.where((a) => _store.isAchieved(a) && !_achievedAtStart.contains(a.id));
-    final choice = await showDialog<_Choice>(
+    final choice = await showDialog<ResultChoice>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _ResultDialog(
+      builder: (context) => ResultDialog(
         title: '收攤！${_game.level.name}完成',
         stars: _game.stars,
         lines: [
@@ -368,7 +367,7 @@ class _GameScreenState extends State<GameScreen> {
 
     var coins = earned;
     var watchedAd = false;
-    if (choice == _Choice.watchAd) {
+    if (choice == ResultChoice.watchAd) {
       watchedAd = await _watchRewarded();
       if (watchedAd) coins *= 2;
     }
@@ -384,7 +383,7 @@ class _GameScreenState extends State<GameScreen> {
       if (!mounted) return;
     }
 
-    if (choice == _Choice.leave) {
+    if (choice == ResultChoice.leave) {
       _leave();
       return;
     }
@@ -392,10 +391,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _showLoseDialog() async {
-    final choice = await showDialog<_Choice>(
+    final choice = await showDialog<ResultChoice>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _ResultDialog(
+      builder: (context) => ResultDialog(
         title: '時間到了',
         lines: ['還差 ${_game.pairsLeft} 組就收攤了'],
         adLabel: _game.canRevive ? '看廣告 +${MatchingGame.reviveSeconds} 秒繼續' : null,
@@ -406,7 +405,7 @@ class _GameScreenState extends State<GameScreen> {
     if (!mounted) return;
 
     switch (choice) {
-      case _Choice.watchAd:
+      case ResultChoice.watchAd:
         final earned = await _watchRewarded();
         if (!mounted) return;
         if (earned && _game.revive()) {
@@ -415,9 +414,9 @@ class _GameScreenState extends State<GameScreen> {
         } else {
           await _showLoseDialog(); // 廣告沒播成功，回到時間到的視窗
         }
-      case _Choice.leave:
+      case ResultChoice.leave:
         _leave();
-      case _Choice.primary:
+      case ResultChoice.primary:
       case null:
         setState(() => _startLevel(_levelIndex));
     }
@@ -466,7 +465,7 @@ class _GameScreenState extends State<GameScreen> {
       children: [
         for (final type in ItemType.values) ...[
           Expanded(
-            child: _ItemTile(
+            child: ItemTile(
               key: ValueKey('item_${type.name}'),
               emoji: type.emoji,
               label: type.label,
@@ -477,7 +476,7 @@ class _GameScreenState extends State<GameScreen> {
           const SizedBox(width: 6),
         ],
         Expanded(
-          child: _ItemTile(
+          child: ItemTile(
             key: const ValueKey('peek'),
             emoji: '👀',
             label: '偷看',
@@ -658,165 +657,5 @@ class _GameScreenState extends State<GameScreen> {
         ),
       );
     });
-  }
-}
-
-/// 道具列的一格：圖示、名稱、數量（或「廣告」標籤）。
-class _ItemTile extends StatelessWidget {
-  const _ItemTile({super.key, required this.emoji, required this.label, required this.badge, required this.onTap});
-
-  final String emoji;
-  final String label;
-  final String badge;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: onTap == null ? 0.4 : 1,
-      child: Material(
-        color: NightColors.stall,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Column(
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 20)),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(label, style: const TextStyle(color: NightColors.paper, fontSize: 11)),
-                ),
-                Text(badge, style: const TextStyle(color: NightColors.glow, fontSize: 11, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 有「廣告」標籤的按鈕，讓玩家一眼看出按了會播廣告。
-class _AdButton extends StatelessWidget {
-  const _AdButton({super.key, required this.label, required this.onPressed, this.onPaper = false});
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  /// 放在米色結果視窗上時改用深一點的顏色。
-  final bool onPaper;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = onPaper ? const Color(0xFFA2580A) : NightColors.glow;
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: color,
-        disabledForegroundColor: color.withValues(alpha: 0.4),
-        side: BorderSide(color: onPressed == null ? color.withValues(alpha: 0.3) : color, width: 1.5),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: onPressed == null ? color.withValues(alpha: 0.4) : color,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '廣告',
-              style: TextStyle(fontSize: 11, color: onPaper ? NightColors.paper : NightColors.ink),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500))),
-        ],
-      ),
-    );
-  }
-}
-
-/// 過關／時間到的結果視窗，菜單紙風格。關閉時回傳玩家的選擇。
-class _ResultDialog extends StatelessWidget {
-  const _ResultDialog({
-    required this.title,
-    required this.lines,
-    required this.primaryLabel,
-    required this.leaveLabel,
-    this.adLabel,
-    this.stars,
-  });
-
-  final String title;
-  final List<String> lines;
-  final String primaryLabel;
-  final String leaveLabel;
-  final String? adLabel;
-  final int? stars;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: NightColors.paper,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: NightColors.ink, fontSize: 24, fontWeight: FontWeight.w800),
-            ),
-            if (stars != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${'★' * stars!}${'☆' * (3 - stars!)}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFD9A21B), fontSize: 30, letterSpacing: 6),
-              ),
-            ],
-            const SizedBox(height: 10),
-            for (final line in lines)
-              Text(line, textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
-            const SizedBox(height: 16),
-            if (adLabel != null) ...[
-              _AdButton(
-                key: const ValueKey('dialog_ad'),
-                label: adLabel!,
-                onPaper: true,
-                onPressed: () => Navigator.of(context).pop(_Choice.watchAd),
-              ),
-              const SizedBox(height: 10),
-            ],
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(_Choice.primary),
-              style: FilledButton.styleFrom(
-                backgroundColor: NightColors.glow,
-                foregroundColor: NightColors.ink,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: Text(primaryLabel, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            ),
-            const SizedBox(height: 4),
-            TextButton(
-              key: const ValueKey('dialog_leave'),
-              onPressed: () => Navigator.of(context).pop(_Choice.leave),
-              child: Text(leaveLabel, style: const TextStyle(color: NightColors.ink)),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
