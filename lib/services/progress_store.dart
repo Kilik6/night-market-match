@@ -32,6 +32,8 @@ class ProgressStore {
   static const _checkInDateKey = 'checkin_last';
   static const _checkInStreakKey = 'checkin_streak';
   static const _endlessBestKey = 'endless_best_score';
+  static const _endlessBestMatchesKey = 'stat_endless_best_matches';
+  static const _endlessRoundsKey = 'stat_endless_rounds';
   static String _starsKey(int level) => 'stars_$level';
   static String _itemKey(ItemType type) => 'item_${type.name}';
   static String _gearKey(GearType type) => 'gear_${type.name}';
@@ -178,13 +180,19 @@ class ProgressStore {
   // ---------- 夜市大胃王（無盡模式） ----------
 
   int get endlessBest => _prefs.getInt(_endlessBestKey) ?? 0;
+  int get endlessBestMatches => _prefs.getInt(_endlessBestMatchesKey) ?? 0;
+  int get endlessRounds => _prefs.getInt(_endlessRoundsKey) ?? 0;
 
-  /// 一輪結束時呼叫。回傳是否刷新最高分。
-  Future<bool> recordEndlessScore(int score) async {
+  /// 時間到時呼叫（續命後再次時間到也要呼叫）。記錄單輪最高分和最多組數，回傳是否刷新最高分。
+  Future<bool> recordEndlessScore(int score, {int matches = 0}) async {
+    if (matches > endlessBestMatches) await _prefs.setInt(_endlessBestMatchesKey, matches);
     if (score <= endlessBest) return false;
     await _prefs.setInt(_endlessBestKey, score);
     return true;
   }
+
+  /// 每一輪只呼叫一次，累積玩了幾輪。
+  Future<void> recordEndlessRound() => _prefs.setInt(_endlessRoundsKey, endlessRounds + 1);
 
   // ---------- 成就 ----------
 
@@ -195,6 +203,9 @@ class ProgressStore {
         Metric.totalStars => totalStars,
         Metric.foods => discoveredFoods.length,
         Metric.levelsCleared => levelsCleared,
+        Metric.endlessBest => endlessBest,
+        Metric.endlessBestMatches => endlessBestMatches,
+        Metric.endlessRounds => endlessRounds,
       };
 
   bool isAchieved(Achievement a) => metricValue(a.metric) >= a.target;

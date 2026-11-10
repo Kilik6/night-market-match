@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../game/achievements.dart';
 import '../game/card_skins.dart';
 import '../game/endless_game.dart';
 import '../game/items.dart';
@@ -76,6 +77,12 @@ class _EndlessScreenState extends State<EndlessScreen> {
   /// 上一次配對前開放幾種小吃，用來提示「新攤位開張」。
   int _kindsBeforeLastMatch = EndlessGame.startKinds;
 
+  /// 這一輪開始前已達成的成就，用來判斷這輪新達成了哪些。
+  Set<String> _achievedAtStart = {};
+
+  /// 這一輪是否已經算進「累積玩幾輪」。廣告失敗會重開結算視窗、續命後會再結算一次，都只算一次。
+  bool _roundCounted = false;
+
   /// 播廣告、問要不要離開、結算時暫停倒數。
   bool _paused = false;
   String _message = _intro;
@@ -115,6 +122,8 @@ class _EndlessScreenState extends State<EndlessScreen> {
     _dealt = List.filled(_game.boardSize, 0);
     _bestAtStart = _store.endlessBest;
     _kindsBeforeLastMatch = _game.activeKinds;
+    _achievedAtStart = {for (final a in achievements) if (_store.isAchieved(a)) a.id};
+    _roundCounted = false;
     _message = _intro;
     _startClock();
   }
@@ -357,8 +366,13 @@ class _EndlessScreenState extends State<EndlessScreen> {
   Future<void> _showEndDialog() async {
     _refillTimer?.cancel();
     _refill(); // 最後一組的空格補起來，續命時桌面才是完整的（走發牌動畫，不會翻出新牌的正面）
-    await _store.recordEndlessScore(_game.score);
+    await _store.recordEndlessScore(_game.score, matches: _game.matches);
+    if (!_roundCounted) {
+      _roundCounted = true;
+      await _store.recordEndlessRound();
+    }
     if (!mounted) return;
+    final newAchievements = achievements.where((a) => _store.isAchieved(a) && !_achievedAtStart.contains(a.id));
     final isRecord = _game.score > _bestAtStart;
     final coins = _game.coinsEarned;
     final choice = await showDialog<ResultChoice>(
@@ -371,6 +385,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
           '總分 ${_game.score}',
           if (isRecord) '刷新最高分！（原本 $_bestAtStart）' else '最高分 ${_store.endlessBest}',
           '獲得 🪙 $coins',
+          for (final a in newAchievements) '🏆 成就達成：${a.name}',
         ],
         adLabel: _game.canRevive ? '看廣告 +${EndlessGame.reviveSeconds} 秒繼續吃' : null,
         primaryLabel: '再吃一輪',

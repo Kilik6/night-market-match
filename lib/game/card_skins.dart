@@ -96,6 +96,16 @@ const cardSkins = <CardSkin>[
     markColor: Color(0xFFFFB547),
     achievementOnly: true,
   ),
+  CardSkin(
+    id: 'gourmet',
+    name: '饕客',
+    price: 0,
+    base: Color(0xFF9E2A1F),
+    edge: Color(0xFFF5CB5C),
+    mark: '饕',
+    markColor: Color(0xFFFBF1DC),
+    achievementOnly: true,
+  ),
 ];
 
 CardSkin skinById(String id) => cardSkins.firstWhere((s) => s.id == id, orElse: () => cardSkins.first);

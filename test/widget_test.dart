@@ -446,6 +446,36 @@ void main() {
       expect(store.ownedSkins, contains('god'));
     });
 
+    test('夜市大胃王紀錄：最高分、最多組數、輪數都計入成就，重置會清掉', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await ProgressStore.load();
+      Achievement byId(String id) => achievements.firstWhere((a) => a.id == id);
+
+      expect(await store.recordEndlessScore(2400, matches: 20), isTrue);
+      expect(await store.recordEndlessScore(1800, matches: 55), isFalse, reason: '分數沒破紀錄');
+      expect(store.endlessBest, 2400);
+      expect(store.endlessBestMatches, 55, reason: '組數各自比較，沒破分數紀錄也會更新');
+      await store.recordEndlessRound();
+      await store.recordEndlessRound();
+      expect(store.endlessRounds, 2);
+
+      expect(store.isAchieved(byId('endless_first')), isTrue);
+      expect(store.isAchieved(byId('endless_2000')), isTrue);
+      expect(store.isAchieved(byId('endless_5000')), isFalse);
+      expect(store.isAchieved(byId('endless_pairs50')), isTrue);
+      expect(store.isAchieved(byId('endless_rounds20')), isFalse);
+
+      await store.recordEndlessScore(10000);
+      expect(await store.claimAchievement(byId('endless_10000')), isTrue);
+      expect(store.ownedSkins, contains('gourmet'));
+      expect(await store.buySkin(skinById('gourmet')), isFalse, reason: '成就限定卡背不能用金幣買');
+
+      await store.resetProgress();
+      expect(store.endlessBest, 0);
+      expect(store.endlessBestMatches, 0);
+      expect(store.endlessRounds, 0);
+    });
+
     test('圖鑑：同一種小吃只收錄一次', () async {
       SharedPreferences.setMockInitialValues({});
       final store = await ProgressStore.load();
@@ -1299,6 +1329,45 @@ void main() {
       await tapAndSettle(tester, find.byKey(const ValueKey('dialog_leave')));
       expect(store.coins, 5, reason: '100 分 ÷ 20，只發一次');
       expect(find.text('最高分 100'), findsOneWidget, reason: '首頁入口顯示最高分');
+    });
+
+    testWidgets('結算視窗顯示新達成的成就；續命和廣告失敗都只算一輪', (tester) async {
+      await pumpEndless(tester);
+      final g = mirrorEndless();
+      for (var i = 0; i < 5; i++) {
+        await eatPair(tester, g);
+      }
+      expect(g.score, 1500);
+      await runOutOfTime(tester);
+      expect(find.text('🏆 成就達成：開吃！'), findsOneWidget);
+      expect(store.endlessRounds, 1);
+      expect(store.endlessBestMatches, 5);
+
+      ads.rewardSucceeds = false;
+      await tester.tap(find.byKey(const ValueKey('dialog_ad')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(store.endlessRounds, 1, reason: '廣告失敗重開結算視窗不能多算一輪');
+
+      ads.rewardSucceeds = true;
+      await tester.tap(find.byKey(const ValueKey('dialog_ad')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      for (var i = 0; i < 2; i++) {
+        await eatPair(tester, g);
+      }
+      expect(g.score, 2500, reason: '續命後連擊延續：1500 + 500 + 500（連擊上限 5）');
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(store.endlessRounds, 1, reason: '續命後再結算還是同一輪');
+      expect(store.endlessBest, 2500);
+      expect(find.text('🏆 成就達成：開吃！'), findsOneWidget);
+      expect(find.text('🏆 成就達成：吃飽飽'), findsOneWidget, reason: '續命後才達到 2000 分');
+
+      await tapAndSettle(tester, find.text('再吃一輪'));
+      await runOutOfTime(tester);
+      expect(store.endlessRounds, 2);
+      expect(find.textContaining('🏆 成就達成'), findsNothing, reason: '已經達成過的不再顯示');
     });
 
     testWidgets('中途離開要確認，分數和金幣都不保存', (tester) async {

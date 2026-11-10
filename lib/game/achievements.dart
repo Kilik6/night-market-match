@@ -1,5 +1,17 @@
 /// 成就用來判斷進度的數值。
-enum Metric { clears, bestCombo, perfectRuns, totalStars, foods, levelsCleared }
+enum Metric {
+  clears,
+  bestCombo,
+  perfectRuns,
+  totalStars,
+  foods,
+  levelsCleared,
+
+  /// 夜市大胃王：單輪最高分、單輪最多配對組數、累積玩了幾輪。
+  endlessBest,
+  endlessBestMatches,
+  endlessRounds,
+}
 
 /// 成就：達成後到成就頁領獎。id 會寫進存檔，上架後不要改。
 class Achievement {
@@ -34,6 +46,13 @@ const achievements = <Achievement>[
   Achievement(id: 'clears50', name: '夜市常客', description: '累積過關 50 次', metric: Metric.clears, target: 50, coins: 300),
   Achievement(id: 'tour', name: '全台走透透', description: '通過全部 18 攤', metric: Metric.levelsCleared, target: 18, skinId: 'tour'),
   Achievement(id: 'god', name: '夜市之神', description: '54 顆星全部拿到', metric: Metric.totalStars, target: 54, skinId: 'god'),
+  // 夜市大胃王。目標依模擬估算：只記得最近 6 張牌、每 0.6 秒翻一張的玩家單輪中位數約 6000 分、45 組
+  Achievement(id: 'endless_first', name: '開吃！', description: '玩完 1 輪夜市大胃王', metric: Metric.endlessRounds, target: 1, coins: 50),
+  Achievement(id: 'endless_2000', name: '吃飽飽', description: '夜市大胃王單輪 2000 分', metric: Metric.endlessBest, target: 2000, coins: 100),
+  Achievement(id: 'endless_5000', name: '越吃越順', description: '夜市大胃王單輪 5000 分', metric: Metric.endlessBest, target: 5000, coins: 300),
+  Achievement(id: 'endless_pairs50', name: '吃不停', description: '夜市大胃王單輪吃 50 組', metric: Metric.endlessBestMatches, target: 50, coins: 300),
+  Achievement(id: 'endless_rounds20', name: '大胃王常客', description: '累積玩 20 輪夜市大胃王', metric: Metric.endlessRounds, target: 20, coins: 200),
+  Achievement(id: 'endless_10000', name: '夜市饕客', description: '夜市大胃王單輪 10000 分', metric: Metric.endlessBest, target: 10000, skinId: 'gourmet'),
 ];
 
 /// 每日任務。id 會寫進存檔，上架後不要改。
