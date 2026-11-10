@@ -8,6 +8,7 @@ import '../game/card_skins.dart';
 import '../game/endless_game.dart';
 import '../game/items.dart';
 import '../game/matching_game.dart' show PickResult;
+import '../game/night_market_data.dart';
 import '../services/ad_service.dart';
 import '../services/progress_store.dart';
 import '../services/sound_service.dart';
@@ -46,13 +47,27 @@ class EndlessScreen extends StatefulWidget {
 
 /// 一個進行中的配對特效。
 class _Burst {
-  _Burst({required this.card, required this.intensity, required this.seed, this.label, this.sublabel});
+  _Burst({required this.card, required this.intensity, required this.seed, this.label, this.sublabel, this.at});
 
   final int card;
+
+  /// 特效中心點；沒指定就放在 [card] 那張牌上。
+  final Offset? at;
   final int intensity;
   final int seed;
   final String? label;
   final String? sublabel;
+}
+
+/// 一組配對成功、正在飛起來相撞消失的牌。
+class _Merge {
+  _Merge({required this.a, required this.b, required this.food, required this.combo, required this.points});
+
+  final int a;
+  final int b;
+  final Food food;
+  final int combo;
+  final int points;
 }
 
 class _EndlessScreenState extends State<EndlessScreen> {
@@ -60,6 +75,21 @@ class _EndlessScreenState extends State<EndlessScreen> {
 
   /// 配對成功後，牌留在桌上發光多久才補新牌。
   static const refillDelay = Duration(milliseconds: 650);
+
+  /// 相撞時在兩張牌中間放特效、飄分數。
+  void _onCollide(_Merge m, Offset at) {
+    if (!mounted) return;
+    setState(() {
+      _bursts.add(_Burst(
+        card: m.b,
+        at: at,
+        intensity: m.combo + 1,
+        seed: _burstCount++,
+        label: '+${m.points}',
+        sublabel: m.combo > 1 ? '${m.combo} 連擊' : null,
+      ));
+    });
+  }
 
   static const _intro = '配對成功會加時間，看你能吃多少！';
 
@@ -77,6 +107,9 @@ class _EndlessScreenState extends State<EndlessScreen> {
   int _previewLeft = 0;
 
   final List<_Burst> _bursts = [];
+
+  /// 正在播放相撞動畫的配對，這些格子先空著。
+  final List<_Merge> _merges = [];
   int _burstCount = 0;
 
   /// 每一格發過幾次牌。補牌時加一，讓那一格整張重建並播放發牌動畫。
@@ -125,6 +158,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
     _cancelTimers();
     _paused = false;
     _bursts.clear();
+    _merges.clear();
     _game = EndlessGame(
       random: widget.random,
       bonusSeconds: GearEffects.bonusSeconds(_store.gearLevel(GearType.hat)),
@@ -282,7 +316,16 @@ class _EndlessScreenState extends State<EndlessScreen> {
   void _onMatched() {
     final food = _game.lastMatched!;
     final kindsBefore = _kindsBeforeLastMatch;
-    _addBursts();
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (!reduceMotion) {
+      _merges.add(_Merge(
+        a: _game.lastMatchedCards[0],
+        b: _game.lastMatchedCards[1],
+        food: food,
+        combo: _game.lastCombo,
+        points: _game.lastPoints,
+      ));
+    }
     final isNew = !_store.discoveredFoods.contains(food.name);
     _store.recordMatch(food, _game.lastCombo);
     _sounds.play(_game.lastCombo >= 3 ? Sfx.combo : Sfx.match);
@@ -298,9 +341,9 @@ class _EndlessScreenState extends State<EndlessScreen> {
       }
     });
     _kindsBeforeLastMatch = _game.activeKinds;
-    // 讓剛配對的牌發光一下再補新牌；連續配對時只補一次就會把空格都補滿
+    // 相撞動畫播完再補新牌（減少動態效果時只發光一下）；連續配對時只補一次就會把空格都補滿
     _refillTimer?.cancel();
-    _refillTimer = Timer(refillDelay, _refill);
+    _refillTimer = Timer(reduceMotion ? refillDelay : _MergeFly.duration, _refill);
   }
 
   void _refill() {
@@ -310,22 +353,6 @@ class _EndlessScreenState extends State<EndlessScreen> {
         _dealt[i]++;
       }
     });
-  }
-
-  /// 在剛配對的兩張牌上放特效：第二張牌上面飄分數，連擊越高特效越大。
-  void _addBursts() {
-    if (MediaQuery.of(context).disableAnimations) return;
-    final combo = _game.lastCombo;
-    final cards = _game.lastMatchedCards;
-    _bursts
-      ..add(_Burst(card: cards[0], intensity: combo, seed: _burstCount++))
-      ..add(_Burst(
-        card: cards[1],
-        intensity: combo,
-        seed: _burstCount++,
-        label: '+${_game.lastPoints}',
-        sublabel: combo > 1 ? '$combo 連擊' : null,
-      ));
   }
 
   Future<void> _onItem(ItemType type) async {
@@ -678,22 +705,43 @@ class _EndlessScreenState extends State<EndlessScreen> {
                       width: cardWidth,
                       height: cardHeight,
                       // 補牌時換 key，整張重建並播放發牌動畫（不會播翻回背面的動畫）
-                      child: _DealIn(
-                        key: ValueKey('slot_${i}_${_dealt[i]}'),
-                        animate: _dealt[i] > 0 && !reduceMotion,
-                        child: CardWidget(
-                          key: ValueKey('card_$i'),
-                          food: _game.cards[i],
-                          isShow: _game.isFaceUp(i),
-                          isMatched: _game.isMatched[i],
-                          skin: skin,
-                          width: cardWidth,
-                          onTap: () => _onCardTap(i),
+                      child: Opacity(
+                        key: ValueKey('slot_visible_$i'),
+                        // 正在飛起來相撞的牌，原本的格子先空著
+                        opacity: _merges.any((m) => m.a == i || m.b == i) ? 0 : 1,
+                        child: _DealIn(
+                          key: ValueKey('slot_${i}_${_dealt[i]}'),
+                          animate: _dealt[i] > 0 && !reduceMotion,
+                          child: CardWidget(
+                            key: ValueKey('card_$i'),
+                            food: _game.cards[i],
+                            isShow: _game.isFaceUp(i),
+                            isMatched: _game.isMatched[i],
+                            skin: skin,
+                            width: cardWidth,
+                            onTap: () => _onCardTap(i),
+                          ),
                         ),
                       ),
                     ),
                 ],
               ),
+              for (final m in _merges)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _MergeFly(
+                      key: ObjectKey(m),
+                      from: [cardCenter(m.a), cardCenter(m.b)],
+                      cardSize: Size(cardWidth, cardHeight),
+                      food: m.food,
+                      skin: skin,
+                      onCollide: (at) => _onCollide(m, at),
+                      onDone: () {
+                        if (mounted) setState(() => _merges.remove(m));
+                      },
+                    ),
+                  ),
+                ),
               // 開局提示框：牌桌正中央
               if (_game.isPreviewing && !_game.previewCardsUp)
                 Positioned.fill(
@@ -703,8 +751,8 @@ class _EndlessScreenState extends State<EndlessScreen> {
                 ),
               for (final burst in _bursts)
                 Positioned(
-                  left: cardCenter(burst.card).dx - MatchBurst.size / 2,
-                  top: cardCenter(burst.card).dy - MatchBurst.size / 2,
+                  left: (burst.at ?? cardCenter(burst.card)).dx - MatchBurst.size / 2,
+                  top: (burst.at ?? cardCenter(burst.card)).dy - MatchBurst.size / 2,
                   child: IgnorePointer(
                     child: MatchBurst(
                       key: ObjectKey(burst),
@@ -747,6 +795,132 @@ class _DealIn extends StatelessWidget {
         opacity: t.clamp(0.0, 1.0),
         child: Transform.scale(scale: 0.5 + 0.5 * t, child: child),
       ),
+    );
+  }
+}
+
+/// 配對成功的兩張牌：浮起來、往中間飛、相撞重疊，然後縮小消失。
+class _MergeFly extends StatefulWidget {
+  const _MergeFly({
+    super.key,
+    required this.from,
+    required this.cardSize,
+    required this.food,
+    required this.skin,
+    required this.onCollide,
+    required this.onDone,
+  });
+
+  static const duration = Duration(milliseconds: 900);
+
+  /// 相撞的時間點（佔 [duration] 的比例）。
+  static const collideAt = 0.6;
+
+  /// 兩張牌原本的中心點。
+  final List<Offset> from;
+  final Size cardSize;
+  final Food food;
+  final CardSkin skin;
+
+  /// 相撞時呼叫，帶入相撞的位置（兩張牌的中點）。
+  final ValueChanged<Offset> onCollide;
+  final VoidCallback onDone;
+
+  @override
+  State<_MergeFly> createState() => _MergeFlyState();
+}
+
+class _MergeFlyState extends State<_MergeFly> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(vsync: this, duration: _MergeFly.duration);
+  bool _collided = false;
+
+  Offset get _mid => (widget.from[0] + widget.from[1]) / 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller
+      ..addListener(() {
+        if (!_collided && _controller.value >= _MergeFly.collideAt) {
+          _collided = true;
+          widget.onCollide(_mid);
+        }
+      })
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) widget.onDone();
+      })
+      ..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double _phase(double begin, double end, [Curve curve = Curves.linear]) =>
+      curve.transform(((_controller.value - begin) / (end - begin)).clamp(0.0, 1.0));
+
+  @override
+  Widget build(BuildContext context) {
+    final size = widget.cardSize;
+    final card = CardWidget(
+      food: widget.food,
+      isShow: true,
+      isMatched: true,
+      skin: widget.skin,
+      width: size.width,
+      onTap: () {},
+    );
+    return AnimatedBuilder(
+      key: const ValueKey('merge_fly'),
+      animation: _controller,
+      builder: (context, child) {
+        final lift = _phase(0, 0.2, Curves.easeOut); // 浮起來
+        final move = _phase(0.2, _MergeFly.collideAt, Curves.easeInCubic); // 往中間飛，越飛越快
+        final bump = sin(pi * _phase(_MergeFly.collideAt, 0.75)); // 相撞時擠一下
+        final vanish = _phase(0.75, 1, Curves.easeIn); // 縮小消失
+        final scale = (1 + 0.12 * lift) * (1 + 0.18 * bump) * (1 - 0.85 * vanish);
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var k = 0; k < 2; k++)
+              Builder(builder: (context) {
+                final center = Offset.lerp(widget.from[k], _mid, move)! + Offset(0, -12 * lift);
+                // 飛的時候往對方傾斜，撞上時回正
+                final tilt = (k == 0 ? 1 : -1) * 0.18 * sin(pi * move);
+                return Positioned(
+                  left: center.dx - size.width / 2,
+                  top: center.dy - size.height / 2,
+                  width: size.width,
+                  height: size.height,
+                  child: Opacity(
+                    opacity: 1 - vanish,
+                    child: Transform.rotate(
+                      angle: tilt,
+                      child: Transform.scale(
+                        scale: scale,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: NightColors.jade.withValues(alpha: 0.6 * lift * (1 - vanish)),
+                                blurRadius: 18 + 14 * bump,
+                              ),
+                            ],
+                          ),
+                          child: child,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+          ],
+        );
+      },
+      child: card,
     );
   }
 }

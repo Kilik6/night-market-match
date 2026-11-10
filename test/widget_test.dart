@@ -1261,7 +1261,7 @@ void main() {
       g.pick(a);
       g.pick(b);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 700)); // 等補牌
+      await tester.pump(const Duration(milliseconds: 950)); // 等相撞動畫播完、補牌
       await tester.pump(const Duration(milliseconds: 400)); // 等發牌動畫
       g.refill();
     }
@@ -1304,6 +1304,85 @@ void main() {
       expect(find.byKey(const ValueKey('endless_progress')), findsOneWidget);
       expect(find.text('已吃 13 組・最高分 ${g.score}'), findsOneWidget);
       expect(store.discoveredFoods, isNotEmpty, reason: '大胃王配到的小吃也會收錄圖鑑');
+    });
+
+    testWidgets('配對成功：兩張牌浮起來往中間飛、相撞後才放特效，消失後補新牌', (tester) async {
+      await pumpEndless(tester);
+      final g = mirrorEndless();
+      late int a, b;
+      outer:
+      for (a = 0; a < 16; a++) {
+        for (b = a + 1; b < 16; b++) {
+          if (g.cards[a] == g.cards[b]) break outer;
+        }
+      }
+      final startA = tester.getCenter(find.byKey(ValueKey('card_$a')));
+      final startB = tester.getCenter(find.byKey(ValueKey('card_$b')));
+      final mid = (startA + startB) / 2;
+      await tester.tap(find.byKey(ValueKey('card_$a')));
+      await tester.tap(find.byKey(ValueKey('card_$b')));
+      await tester.pump();
+
+      final fly = find.byKey(const ValueKey('merge_fly'));
+      final flying = find.descendant(of: fly, matching: find.byType(CardWidget));
+      double gap() => (tester.getCenter(flying.at(0)) - tester.getCenter(flying.at(1))).distance;
+      Opacity slot(int i) => tester.widget<Opacity>(find.byKey(ValueKey('slot_visible_$i')));
+
+      expect(fly, findsOneWidget);
+      expect(flying, findsNWidgets(2));
+      expect(slot(a).opacity, 0, reason: '原本的格子先空著，不會同時畫兩張');
+      expect(slot(b).opacity, 0);
+      final startGap = gap();
+
+      // 浮起來：還沒往中間飛，但往上移
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(tester.getCenter(flying.at(0)).dy, lessThan(startA.dy));
+      expect(find.text('+100'), findsNothing, reason: '還沒撞上，不放特效');
+
+      // 飛到快撞上：兩張距離大幅縮短
+      await tester.pump(const Duration(milliseconds: 330));
+      expect(gap(), lessThan(startGap * 0.5));
+      expect(find.text('+100'), findsNothing);
+
+      // 撞上：重疊在中點，從中間飄分數
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(gap(), lessThan(1), reason: '兩張重疊');
+      expect((tester.getCenter(flying.at(0)) - mid).distance, lessThan(14), reason: '在兩張牌的中點（含浮起的高度）');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('+100'), findsOneWidget);
+
+      // 消失、補新牌
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      expect(fly, findsNothing);
+      expect(slot(a).opacity, 1);
+      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$a'))).isMatched, isFalse, reason: '已補上新牌');
+      await tester.pump(const Duration(milliseconds: 1200));
+    });
+
+    testWidgets('減少動態效果時不飛不撞，牌發光一下就補新牌', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1), previewSeconds: 0),
+        ),
+      ));
+      final g = mirrorEndless();
+      late int a, b;
+      outer:
+      for (a = 0; a < 16; a++) {
+        for (b = a + 1; b < 16; b++) {
+          if (g.cards[a] == g.cards[b]) break outer;
+        }
+      }
+      await tester.tap(find.byKey(ValueKey('card_$a')));
+      await tester.tap(find.byKey(ValueKey('card_$b')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('merge_fly')), findsNothing);
+      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$a'))).isMatched, isTrue);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$a'))).isMatched, isFalse);
     });
 
     testWidgets('補上的新牌是蓋著的', (tester) async {
