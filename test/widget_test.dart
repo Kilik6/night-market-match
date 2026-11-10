@@ -936,6 +936,8 @@ void main() {
         expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
       }
       expect(find.textContaining('每組得分 100 × 連擊（最高 ×5）'), findsOneWidget);
+      expect(find.text('每一局開始時，先提示 $previewHintSeconds 秒，接著所有卡牌翻開 $previewMemorizeSeconds 秒讓你記住位置，蓋回去後才開始計時。'),
+          findsOneWidget);
       expect(find.textContaining('金幣是分數 ÷ 20'), findsOneWidget);
       await tester.scrollUntilVisible(find.byKey(const ValueKey('howto_more')), 300);
       for (final type in ItemType.values) {

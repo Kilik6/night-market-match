@@ -5,6 +5,7 @@ import '../game/items.dart';
 import '../game/matching_game.dart';
 import '../game/night_market_data.dart';
 import '../theme.dart';
+import '../widgets/game_widgets.dart';
 import '../widgets/night_scaffold.dart';
 
 /// 玩法說明：兩種模式、計分、道具、裝備、廣告獎勵。
@@ -26,6 +27,7 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🃏',
             title: '基本玩法',
             lines: [
+              '每一局開始時，先提示 $previewHintSeconds 秒，接著所有卡牌翻開 $previewMemorizeSeconds 秒讓你記住位置，蓋回去後才開始計時。',
               '一次翻開兩張牌，是同一種小吃就配對成功。',
               '不一樣的話牌會蓋回去，記住每張牌的位置是過關的關鍵。',
               '連續配對成功會累積連擊，每組得分 $points × 連擊（最高 ×$combo），翻錯就中斷連擊。',
