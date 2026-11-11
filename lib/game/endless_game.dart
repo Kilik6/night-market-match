@@ -49,6 +49,12 @@ class EndlessGame {
   /// 桌上落單牌的目標數量上限。
   static const maxTargetSingles = 6;
 
+  /// 連續翻錯幾次就給老闆提示。
+  static const bossHintAfterMisses = 2;
+
+  /// 老闆提示後至少要再配對幾組才會再提示，避免故意亂翻拿答案。
+  static const bossHintCooldownMatches = 3;
+
   /// 補牌時有這個機率不照目標走，讓補牌不會太好預測。
   static const surpriseChance = 0.2;
 
@@ -76,6 +82,15 @@ class EndlessGame {
   /// 已配對、等待 [refill] 補新牌的格子。
   late List<bool> isMatched;
 
+  /// 這張牌玩家看過了沒（翻過、開局翻牌、偷看、老闆提示都算）。沒看過的牌卡背會標「新」。
+  late List<bool> isSeen;
+
+  /// 連續翻錯幾次，配對成功就歸零。
+  int consecutiveMisses = 0;
+
+  /// 上次老闆提示之後配對了幾組，用來算冷卻。
+  int matchesSinceBossHint = 0;
+
   int? firstPickedIndex;
   int? secondPickedIndex;
   int steps = 0;
@@ -91,11 +106,8 @@ class EndlessGame {
   bool hintUsed = false;
   bool isPeeking = false;
 
-  /// 開局準備中（先顯示提示、再翻開全部牌讓玩家記），這段時間不能翻牌、不倒數、不能偷看。
+  /// 開局翻開全部牌讓玩家記位置，這段時間不能翻牌、不倒數、不能偷看。
   bool isPreviewing = false;
-
-  /// 準備的後半段：全部牌翻開讓玩家記位置。
-  bool previewCardsUp = false;
 
   /// 看廣告「+15 秒繼續」：每局一次。
   bool revived = false;
@@ -180,6 +192,9 @@ class EndlessGame {
     cards = [...pairs, ...pairs]..shuffle(_random);
     isOpen = List.filled(boardSize, false);
     isMatched = List.filled(boardSize, false);
+    isSeen = List.filled(boardSize, false);
+    consecutiveMisses = 0;
+    matchesSinceBossHint = bossHintCooldownMatches; // 第一次不用等冷卻
     firstPickedIndex = null;
     secondPickedIndex = null;
     steps = 0;
@@ -191,7 +206,6 @@ class EndlessGame {
     hintUsed = false;
     isPeeking = false;
     isPreviewing = false;
-    previewCardsUp = false;
     revived = false;
     mistakes = 0;
     bestCombo = 0;
@@ -210,6 +224,7 @@ class EndlessGame {
     if (isEnded || isLocked || isMatched[index] || isOpen[index]) return PickResult.ignored;
 
     isOpen[index] = true;
+    isSeen[index] = true;
     steps++;
 
     final first = firstPickedIndex;
@@ -225,6 +240,7 @@ class EndlessGame {
 
     secondPickedIndex = index;
     mistakes++;
+    consecutiveMisses++;
     if (charmActive) {
       charmActive = false; // 護身符擋下這次翻錯，連擊不中斷
     } else {
@@ -251,6 +267,8 @@ class EndlessGame {
     // 加秒數不超過上限，但沙漏加超過上限的時間也不會被扣回去
     timeLeft = max(timeLeft, min(maxSeconds, timeLeft + lastTimeGain));
     matches++;
+    consecutiveMisses = 0;
+    matchesSinceBossHint++;
   }
 
   /// 把已配對的格子補上新牌（畫面放完配對特效後呼叫）。回傳補了哪些格子。
@@ -262,6 +280,7 @@ class EndlessGame {
       cards[i] = food;
       isMatched[i] = false;
       isOpen[i] = false;
+      isSeen[i] = false;
       batch.add(food);
     }
     lastRefilled = slots..sort();
@@ -363,21 +382,13 @@ class EndlessGame {
     secondPickedIndex = null;
   }
 
-  /// 開局準備：牌先蓋著，畫面顯示提示後呼叫 [showPreviewCards] 翻開全部牌，
-  /// 記憶時間結束呼叫 [endPreview]。不會用掉偷看的機會。
+  /// 開局翻開全部牌讓玩家記位置，倒數結束畫面呼叫 [endPreview] 蓋回去。不會用掉偷看的機會。
   void startPreview() {
     isPreviewing = true;
-    previewCardsUp = false;
+    _seeAll();
   }
 
-  void showPreviewCards() {
-    if (isPreviewing) previewCardsUp = true;
-  }
-
-  void endPreview() {
-    isPreviewing = false;
-    previewCardsUp = false;
-  }
+  void endPreview() => isPreviewing = false;
 
   /// 開始偷看：先把翻錯等待中的牌蓋回去，再讓畫面顯示全部牌面。
   bool startPeek() {
@@ -385,13 +396,45 @@ class EndlessGame {
     hideMismatched();
     hintUsed = true;
     isPeeking = true;
+    _seeAll();
     return true;
+  }
+
+  void _seeAll() {
+    for (var i = 0; i < boardSize; i++) {
+      isSeen[i] = true;
+    }
+  }
+
+  /// 這張牌要不要標「新」：還在桌上、玩家還沒看過。
+  bool isNew(int index) => !isMatched[index] && !isSeen[index];
+
+  /// 連續翻錯 [bossHintAfterMisses] 次、而且過了冷卻，就挑桌上一組對子告訴玩家（畫面在翻錯的牌蓋回去後呼叫）。
+  /// 回傳那兩張牌的位置；不符合條件回傳 null。
+  List<int>? takeBossHint() {
+    if (isEnded || isLocked) return null;
+    if (consecutiveMisses < bossHintAfterMisses || matchesSinceBossHint < bossHintCooldownMatches) return null;
+    final pairs = <List<int>>[];
+    for (var a = 0; a < boardSize; a++) {
+      if (isMatched[a] || isOpen[a]) continue;
+      for (var b = a + 1; b < boardSize; b++) {
+        if (!isMatched[b] && !isOpen[b] && cards[a] == cards[b]) pairs.add([a, b]);
+      }
+    }
+    if (pairs.isEmpty) return null;
+    // 不用 _random 挑，免得打亂之後補牌的順序；用配對和翻錯次數輪流挑，每次提示的位置不一樣
+    final hint = pairs[(matches + mistakes) % pairs.length];
+    consecutiveMisses = 0;
+    matchesSinceBossHint = 0;
+    isSeen[hint[0]] = true;
+    isSeen[hint[1]] = true;
+    return hint;
   }
 
   void endPeek() => isPeeking = false;
 
   /// 畫面要不要顯示這張牌的正面。
-  bool isFaceUp(int index) => isPeeking || previewCardsUp || isOpen[index];
+  bool isFaceUp(int index) => isPeeking || isPreviewing || isOpen[index];
 
   /// 時間到之後看廣告，多給 15 秒繼續。
   bool revive() {

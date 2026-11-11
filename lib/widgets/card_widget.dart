@@ -18,6 +18,7 @@ class CardWidget extends StatelessWidget {
     required this.onTap,
     required this.width,
     this.skin,
+    this.badge,
   });
 
   final Food food;
@@ -28,6 +29,9 @@ class CardWidget extends StatelessWidget {
 
   /// 沒指定就用預設的紅燈籠。
   final CardSkin? skin;
+
+  /// 卡背右上角的小標籤（例如「新」），翻開時不顯示。
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +74,32 @@ class CardWidget extends StatelessWidget {
     );
   }
 
-  Widget _back() => CardBack(skin: skin ?? cardSkins.first, width: width);
+  Widget _back() {
+    final back = CardBack(skin: skin ?? cardSkins.first, width: width);
+    if (badge == null) return back;
+    return Stack(
+      children: [
+        Positioned.fill(child: back),
+        Positioned(
+          top: 3,
+          right: 3,
+          child: Container(
+            key: const ValueKey('card_badge'),
+            padding: EdgeInsets.symmetric(horizontal: max(3, width * 0.05), vertical: 1),
+            decoration: BoxDecoration(
+              color: NightColors.glow,
+              borderRadius: BorderRadius.circular(6),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3)],
+            ),
+            child: Text(
+              badge!,
+              style: TextStyle(color: NightColors.ink, fontSize: max(9, width * 0.15), fontWeight: FontWeight.w900),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _front() {
     return Container(

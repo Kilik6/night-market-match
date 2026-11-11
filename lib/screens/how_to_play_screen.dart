@@ -27,7 +27,7 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🃏',
             title: '基本玩法',
             lines: [
-              '每一局開始時，先提示 $previewHintSeconds 秒，接著所有卡牌翻開 $previewMemorizeSeconds 秒讓你記住位置，蓋回去後才開始計時。',
+              '每一局開始時，所有卡牌會先翻開 $previewMemorizeSeconds 秒讓你記住位置，倒數結束蓋回去後才開始計時。',
               '一次翻開兩張牌，是同一種小吃就配對成功。',
               '不一樣的話牌會蓋回去，記住每張牌的位置是過關的關鍵。',
               '連續配對成功會累積連擊，每組得分 $points × 連擊（最高 ×$combo），翻錯就中斷連擊。',
@@ -54,6 +54,8 @@ class HowToPlayScreen extends StatelessWidget {
                   '前 20 組 +${EndlessGame.timeGainFor(0)} 秒、到第 50 組 +${EndlessGame.timeGainFor(20)} 秒，'
                   '之後 +${EndlessGame.timeGainFor(50)} 秒。翻錯不扣時間。',
               '越吃越多種小吃上桌，要記的牌也越來越多。同一次補上的新牌一定不是一對。',
+              '還沒翻過的新牌，卡背右上角會標「新」，記不住的時候先從新牌翻起。',
+              '連續翻錯 ${EndlessGame.bossHintAfterMisses} 次，老闆會偷偷亮出一組對子；提示過後要再配對 ${EndlessGame.bossHintCooldownMatches} 組才會再提示。',
               '金幣是分數 ÷ ${EndlessGame.scorePerCoin}。',
             ],
           ),

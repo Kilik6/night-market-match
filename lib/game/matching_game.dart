@@ -55,11 +55,8 @@ class MatchingGame {
   bool hintUsed = false;
   bool isPeeking = false;
 
-  /// 開局準備中（先顯示提示、再翻開全部牌讓玩家記），這段時間不能翻牌、不倒數、不能偷看。
+  /// 開局翻開全部牌讓玩家記位置，這段時間不能翻牌、不倒數、不能偷看。
   bool isPreviewing = false;
-
-  /// 準備的後半段：全部牌翻開讓玩家記位置。
-  bool previewCardsUp = false;
 
   /// 看廣告「+15 秒繼續」：每局一次。
   bool revived = false;
@@ -130,7 +127,6 @@ class MatchingGame {
     hintUsed = false;
     isPeeking = false;
     isPreviewing = false;
-    previewCardsUp = false;
     revived = false;
     mistakes = 0;
     bestCombo = 0;
@@ -230,21 +226,10 @@ class MatchingGame {
     secondPickedIndex = null;
   }
 
-  /// 開局準備：牌先蓋著，畫面顯示提示後呼叫 [showPreviewCards] 翻開全部牌，
-  /// 記憶時間結束呼叫 [endPreview]。不會用掉偷看的機會。
-  void startPreview() {
-    isPreviewing = true;
-    previewCardsUp = false;
-  }
+  /// 開局翻開全部牌讓玩家記位置，倒數結束畫面呼叫 [endPreview] 蓋回去。不會用掉偷看的機會。
+  void startPreview() => isPreviewing = true;
 
-  void showPreviewCards() {
-    if (isPreviewing) previewCardsUp = true;
-  }
-
-  void endPreview() {
-    isPreviewing = false;
-    previewCardsUp = false;
-  }
+  void endPreview() => isPreviewing = false;
 
   /// 開始偷看：先把翻錯等待中的牌蓋回去，再讓畫面顯示全部牌面。
   bool startPeek() {
@@ -258,7 +243,7 @@ class MatchingGame {
   void endPeek() => isPeeking = false;
 
   /// 畫面要不要顯示這張牌的正面。
-  bool isFaceUp(int index) => isPeeking || previewCardsUp || isOpen[index];
+  bool isFaceUp(int index) => isPeeking || isPreviewing || isOpen[index];
 
   /// 時間到之後看廣告，多給 15 秒繼續。
   bool revive() {

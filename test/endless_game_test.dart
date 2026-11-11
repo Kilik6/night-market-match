@@ -352,13 +352,9 @@ void main() {
       expectBoardHealthy(g);
     });
 
-    test('開局準備：先蓋著提示、再全部翻開；期間不能翻牌、不倒數、不能偷看，也不會用掉偷看', () {
+    test('開局翻牌：全部翻開、不能翻牌、不倒數、不能偷看，也不會用掉偷看', () {
       final g = EndlessGame(random: Random(15));
       g.startPreview();
-      expect(List.generate(16, g.isFaceUp).any((up) => up), isFalse, reason: '提示階段牌還蓋著');
-      expect(g.pick(0), PickResult.ignored);
-      expect(g.tick(), isFalse);
-      g.showPreviewCards();
       expect(List.generate(16, g.isFaceUp).every((up) => up), isTrue);
       expect(g.pick(0), PickResult.ignored);
       expect(g.tick(), isFalse);
@@ -368,6 +364,87 @@ void main() {
       expect(List.generate(16, g.isFaceUp).any((up) => up), isFalse);
       expect(g.canPeek, isTrue, reason: '開局翻牌不會用掉偷看');
       expect(g.pick(0), PickResult.firstPicked);
+    });
+
+    test('「新」標記：沒看過的是新的；翻過、開局翻牌、偷看都算看過；補上的牌又是新的', () {
+      final g = EndlessGame(random: Random(16));
+      expect(List.generate(16, g.isNew).every((n) => n), isTrue);
+      g.startPreview();
+      g.endPreview();
+      expect(List.generate(16, g.isNew).any((n) => n), isFalse, reason: '開局翻牌全部看過');
+
+      final (a, b) = anyPair(g);
+      g.pick(a);
+      g.pick(b);
+      expect(g.isNew(a), isFalse, reason: '已配對的不標');
+      final filled = g.refill();
+      for (final i in filled) {
+        expect(g.isNew(i), isTrue, reason: '補上的牌是新的');
+      }
+      g.pick(filled.first);
+      expect(g.isNew(filled.first), isFalse, reason: '翻過就不是新的');
+      g.hideMismatched();
+
+      final g2 = EndlessGame(random: Random(17));
+      g2.startPeek();
+      expect(List.generate(16, g2.isNew).any((n) => n), isFalse, reason: '偷看全部看過');
+    });
+
+    test('老闆提示：連錯 2 次給一組對子，配對會歸零，提示後要再配 3 組才會再給', () {
+      final g = EndlessGame(random: Random(18));
+      void miss() {
+        final (a, b) = anyMismatch(g);
+        g.pick(a);
+        g.pick(b);
+        g.hideMismatched();
+      }
+
+      miss();
+      expect(g.takeBossHint(), isNull, reason: '才錯 1 次');
+      matchAny(g);
+      g.refill();
+      miss();
+      expect(g.takeBossHint(), isNull, reason: '中間配對成功，連錯歸零');
+      miss();
+      final hint = g.takeBossHint();
+      expect(hint, isNotNull);
+      expect(g.cards[hint![0]], g.cards[hint[1]], reason: '提示的是一對');
+      expect(g.isMatched[hint[0]] || g.isMatched[hint[1]], isFalse);
+      expect(g.isNew(hint[0]) || g.isNew(hint[1]), isFalse, reason: '提示過就算看過');
+
+      miss();
+      miss();
+      expect(g.takeBossHint(), isNull, reason: '冷卻中');
+      for (var i = 0; i < EndlessGame.bossHintCooldownMatches; i++) {
+        matchAny(g);
+        g.refill();
+      }
+      miss();
+      miss();
+      expect(g.takeBossHint(), isNotNull, reason: '配了 3 組，冷卻結束');
+    });
+
+    test('老闆提示不會打亂之後的補牌（不用共用的亂數）', () {
+      final a = EndlessGame(random: Random(19));
+      final b = EndlessGame(random: Random(19));
+      for (final g in [a, b]) {
+        final (x, y) = anyMismatch(g);
+        g.pick(x);
+        g.pick(y);
+        g.hideMismatched();
+        final (p, q) = anyMismatch(g);
+        g.pick(p);
+        g.pick(q);
+        g.hideMismatched();
+      }
+      expect(a.takeBossHint(), isNotNull); // 只有 a 拿提示
+      for (var i = 0; i < 10; i++) {
+        matchAny(a);
+        matchAny(b);
+        a.refill();
+        b.refill();
+      }
+      expect(a.cards, b.cards);
     });
 
     test('偷看每局一次，偷看中不能翻牌', () {

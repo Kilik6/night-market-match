@@ -99,11 +99,15 @@ class _EndlessScreenState extends State<EndlessScreen> {
   Timer? _peekTimer;
   Timer? _refillTimer;
   Timer? _previewTimer;
+  Timer? _bossHintTimer;
 
-  /// 開局提示框還剩幾秒。
-  int _hintLeft = 0;
+  /// 老闆提示亮出來的那一組牌。
+  List<int> _bossHint = const [];
 
-  /// 開局翻牌記憶還剩幾秒。
+  /// 老闆提示亮多久。
+  static const bossHintDuration = Duration(milliseconds: 1200);
+
+  /// 開局翻牌還剩幾秒。
   int _previewLeft = 0;
 
   final List<_Burst> _bursts = [];
@@ -152,6 +156,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
     _peekTimer?.cancel();
     _refillTimer?.cancel();
     _previewTimer?.cancel();
+    _bossHintTimer?.cancel();
   }
 
   void _startRound() {
@@ -159,6 +164,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
     _paused = false;
     _bursts.clear();
     _merges.clear();
+    _bossHint = const [];
     _game = EndlessGame(
       random: widget.random,
       bonusSeconds: GearEffects.bonusSeconds(_store.gearLevel(GearType.hat)),
@@ -176,28 +182,16 @@ class _EndlessScreenState extends State<EndlessScreen> {
 
   /// 開局先把牌全部翻開 [previewSeconds] 秒讓玩家記位置，蓋回去後才開始倒數。
   void _startPreview() {
-    if (widget.previewSeconds <= 0) {
+    _previewLeft = widget.previewSeconds;
+    if (_previewLeft <= 0) {
       _startClock();
       return;
     }
-    // 第一段：牌蓋著，牌桌中央顯示提示框
+    // 牌全部翻開，牌桌中央的提示框倒數
     _game.startPreview();
-    _hintLeft = previewHintSeconds;
-    _previewLeft = widget.previewSeconds;
-    _message = '準備開始…';
+    _message = '倒數結束就會蓋牌';
     _previewTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || _paused) return; // 問要不要離開時先停住
-      if (_hintLeft > 0) {
-        setState(() {
-          _hintLeft--;
-          // 第二段：提示框消失、全部牌翻開，上方倒數
-          if (_hintLeft == 0) {
-            _game.showPreviewCards();
-            _message = '倒數結束就會蓋牌';
-          }
-        });
-        return;
-      }
       setState(() => _previewLeft--);
       if (_previewLeft > 0) return;
       timer.cancel();
@@ -304,12 +298,29 @@ class _EndlessScreenState extends State<EndlessScreen> {
         final saved = _game.combo > 1 && !_game.charmActive && _game.usedItems.contains(ItemType.charm);
         setState(() => _message = saved ? '護身符保住了連擊！' : '不一樣，連擊中斷');
         _hideTimer = Timer(const Duration(milliseconds: 700), () {
-          if (mounted) setState(_game.hideMismatched);
+          if (!mounted) return;
+          setState(_game.hideMismatched);
+          _maybeBossHint();
         });
       case PickResult.matched:
       case PickResult.finished:
         _onMatched();
     }
+  }
+
+  /// 連續翻錯太多次：老闆偷偷亮出一組對子。
+  void _maybeBossHint() {
+    final hint = _game.takeBossHint();
+    if (hint == null) return;
+    _sounds.play(Sfx.coin);
+    setState(() {
+      _bossHint = hint;
+      _message = '老闆偷偷告訴你：這兩張是一對！';
+    });
+    _bossHintTimer?.cancel();
+    _bossHintTimer = Timer(bossHintDuration, () {
+      if (mounted) setState(() => _bossHint = const []);
+    });
   }
 
   /// 配對成功（翻牌或放大鏡）：特效、音效、提示、圖鑑紀錄，稍後補上新牌。
@@ -507,7 +518,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
             children: [
               _buildSign(),
               const SizedBox(height: 12),
-              _buildHudOrCountdown(),
+              _buildHud(),
               const SizedBox(height: 8),
               _buildTimeBar(),
               const SizedBox(height: 12),
@@ -604,22 +615,6 @@ class _EndlessScreenState extends State<EndlessScreen> {
     );
   }
 
-  /// 開局翻牌記憶時，時間／分數列換成倒數橫幅（大小一樣，牌桌不會跟著移動）。
-  Widget _buildHudOrCountdown() {
-    return Stack(
-      children: [
-        Visibility(
-          visible: !_game.previewCardsUp,
-          maintainSize: true,
-          maintainAnimation: true,
-          maintainState: true,
-          child: _buildHud(),
-        ),
-        if (_game.previewCardsUp) Positioned.fill(child: PreviewCountdown(secondsLeft: _previewLeft)),
-      ],
-    );
-  }
-
   Widget _buildHud() {
     Widget cell(String label, String value, Key key, int pulseOn) => Expanded(
           child: Container(
@@ -712,14 +707,29 @@ class _EndlessScreenState extends State<EndlessScreen> {
                         child: _DealIn(
                           key: ValueKey('slot_${i}_${_dealt[i]}'),
                           animate: _dealt[i] > 0 && !reduceMotion,
-                          child: CardWidget(
-                            key: ValueKey('card_$i'),
-                            food: _game.cards[i],
-                            isShow: _game.isFaceUp(i),
-                            isMatched: _game.isMatched[i],
-                            skin: skin,
-                            width: cardWidth,
-                            onTap: () => _onCardTap(i),
+                          child: DecoratedBox(
+                            // 老闆提示的那一組亮金光
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                if (_bossHint.contains(i))
+                                  BoxShadow(
+                                    color: NightColors.glow.withValues(alpha: 0.85),
+                                    blurRadius: 18,
+                                    spreadRadius: 2,
+                                  ),
+                              ],
+                            ),
+                            child: CardWidget(
+                              key: ValueKey('card_$i'),
+                              food: _game.cards[i],
+                              isShow: _game.isFaceUp(i) || _bossHint.contains(i),
+                              isMatched: _game.isMatched[i],
+                              skin: skin,
+                              width: cardWidth,
+                              badge: _game.isNew(i) ? '新' : null,
+                              onTap: () => _onCardTap(i),
+                            ),
                           ),
                         ),
                       ),
@@ -742,11 +752,11 @@ class _EndlessScreenState extends State<EndlessScreen> {
                     ),
                   ),
                 ),
-              // 開局提示框：牌桌正中央
-              if (_game.isPreviewing && !_game.previewCardsUp)
+              // 開局提示框：牌桌正中央倒數
+              if (_game.isPreviewing)
                 Positioned.fill(
                   child: IgnorePointer(
-                    child: Center(child: PreviewHint(memorizeSeconds: widget.previewSeconds)),
+                    child: Center(child: PreviewHint(secondsLeft: _previewLeft)),
                   ),
                 ),
               for (final burst in _bursts)
@@ -799,7 +809,7 @@ class _DealIn extends StatelessWidget {
   }
 }
 
-/// 配對成功的兩張牌：浮起來、往中間飛、相撞重疊，然後縮小消失。
+/// 配對成功的兩張牌：浮起來、保持正的往中間吸過去、相撞重疊，然後縮小消失。
 class _MergeFly extends StatefulWidget {
   const _MergeFly({
     super.key,
@@ -887,8 +897,7 @@ class _MergeFlyState extends State<_MergeFly> with SingleTickerProviderStateMixi
             for (var k = 0; k < 2; k++)
               Builder(builder: (context) {
                 final center = Offset.lerp(widget.from[k], _mid, move)! + Offset(0, -12 * lift);
-                // 飛的時候往對方傾斜，撞上時回正
-                final tilt = (k == 0 ? 1 : -1) * 0.18 * sin(pi * move);
+                // 卡牌保持正的，直直吸過去相撞
                 return Positioned(
                   left: center.dx - size.width / 2,
                   top: center.dy - size.height / 2,
@@ -896,22 +905,19 @@ class _MergeFlyState extends State<_MergeFly> with SingleTickerProviderStateMixi
                   height: size.height,
                   child: Opacity(
                     opacity: 1 - vanish,
-                    child: Transform.rotate(
-                      angle: tilt,
-                      child: Transform.scale(
-                        scale: scale,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: NightColors.jade.withValues(alpha: 0.6 * lift * (1 - vanish)),
-                                blurRadius: 18 + 14 * bump,
-                              ),
-                            ],
-                          ),
-                          child: child,
+                    child: Transform.scale(
+                      scale: scale,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: NightColors.jade.withValues(alpha: 0.6 * lift * (1 - vanish)),
+                              blurRadius: 18 + 14 * bump,
+                            ),
+                          ],
                         ),
+                        child: child,
                       ),
                     ),
                   ),
