@@ -35,7 +35,7 @@ class CardSkin {
 const defaultSkinId = 'lantern';
 
 /// emoji 卡背圖案的放大倍率。
-const emojiMarkScale = 1.45;
+const emojiMarkScale = 1.75;
 
 const cardSkins = <CardSkin>[
   CardSkin(
