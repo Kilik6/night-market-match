@@ -173,6 +173,37 @@ class _GameScreenState extends State<GameScreen> {
 
   void _leave() => Navigator.of(context).pop();
 
+  /// 按重新開始：先確認（暫停倒數），確認後從頭開始。
+  Future<void> _onRestart() async {
+    setState(() => _paused = true);
+    final restart = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightColors.paper,
+        title: const Text('重新開始這一攤？', style: TextStyle(color: NightColors.ink, fontWeight: FontWeight.w800)),
+        content: const Text('這一局的進度不會保存。', style: TextStyle(color: NightColors.ink)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('繼續玩', style: TextStyle(color: NightColors.ink)),
+          ),
+          TextButton(
+            key: const ValueKey('confirm_restart'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('重新開始', style: TextStyle(color: Color(0xFFC0392B), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (restart == true) {
+      _sounds.play(Sfx.flip);
+      setState(() => _startLevel(_levelIndex));
+    } else {
+      setState(() => _paused = false);
+    }
+  }
+
   /// 按返回鍵：遊戲進行中先問一下，避免誤觸。
   Future<void> _onBack() async {
     if (_game.isEnded) {
@@ -544,22 +575,38 @@ class _GameScreenState extends State<GameScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _game.level.name,
-                  style: TextStyle(
-                    color: NightColors.glow,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                    shadows: [Shadow(color: NightColors.glow.withValues(alpha: 0.55), blurRadius: 12)],
+                // 小螢幕放不下時縮小成一行，不要被擠成直排
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _game.level.name,
+                    style: TextStyle(
+                      color: NightColors.glow,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                      shadows: [Shadow(color: NightColors.glow.withValues(alpha: 0.55), blurRadius: 12)],
+                    ),
                   ),
                 ),
-                Text(
-                  '第 ${_levelIndex + 1} 攤・${_game.level.city}',
-                  style: const TextStyle(color: NightColors.mist, fontSize: 13, letterSpacing: 1),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '第 ${_levelIndex + 1} 攤・${_game.level.city}',
+                    style: const TextStyle(color: NightColors.mist, fontSize: 13, letterSpacing: 1),
+                  ),
                 ),
               ],
             ),
+          ),
+          IconButton(
+            key: const ValueKey('restart'),
+            tooltip: '重新開始',
+            onPressed: _onRestart,
+            color: NightColors.paper,
+            icon: const Icon(Icons.refresh_rounded),
           ),
           CoinBadge(coins: _store.coins),
         ],

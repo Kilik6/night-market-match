@@ -921,6 +921,56 @@ void main() {
       expect(boba, greaterThan(fortune));
     });
 
+    testWidgets('重新開始：先確認，取消就繼續；確認後從頭開始', (tester) async {
+      await pumpGame(tester);
+      final g = mirror(0);
+      final i = 0;
+      final j = pairOf(g, i);
+      await tester.tap(find.byKey(ValueKey('card_$i')));
+      await tester.tap(find.byKey(ValueKey('card_$j')));
+      await tester.pump(const Duration(milliseconds: 1100));
+      String text(String key) => tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+      expect(text('score'), '100');
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('restart')));
+      expect(find.text('重新開始這一攤？'), findsOneWidget);
+      final time = text('time');
+      await tester.pump(const Duration(seconds: 3));
+      await tapAndSettle(tester, find.text('繼續玩'));
+      expect(text('score'), '100', reason: '取消就繼續這一局');
+      // 視窗開了 3 秒；關掉視窗的 0.6 秒內恢復倒數可能剛好扣 1 秒，沒暫停的話會少 3 秒以上
+      expect(int.parse(text('time')), greaterThanOrEqualTo(int.parse(time) - 1), reason: '確認視窗開著時不倒數');
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('restart')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('confirm_restart')));
+      expect(text('score'), '0');
+      expect(text('time'), '60');
+      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$i'))).isMatched, isFalse);
+      expect(find.text('南機場夜市'), findsOneWidget, reason: '還是同一攤');
+    });
+
+    testWidgets('小螢幕：招牌上的夜市名稱和副標維持一行（多了重新開始按鈕也不會擠成直排）', (tester) async {
+      await setUpStore(tester, const {'coins': 99999, 'unlocked': 18});
+      tester.view.physicalSize = const Size(640, 1136);
+      tester.view.devicePixelRatio = 2;
+      for (var i = 0; i < levels.length; i++) {
+        await tester.pumpWidget(MaterialApp(
+          // 每一攤給不同的 key，才會重新建立畫面（不然會沿用上一攤的狀態）
+          home: GameScreen(
+              key: ValueKey(i), levelIndex: i, store: store, ads: ads, sounds: sounds, random: Random(1), previewSeconds: 0),
+        ));
+        expect(tester.takeException(), isNull, reason: levels[i].name);
+        expect(tester.getRect(find.text(levels[i].name)).height, lessThan(40), reason: '${levels[i].name} 一行');
+        expect(tester.getRect(find.text('第 ${i + 1} 攤・${levels[i].city}')).height, lessThan(24));
+      }
+      await tester.pumpWidget(MaterialApp(
+        home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1), previewSeconds: 0),
+      ));
+      expect(tester.getRect(find.text('夜市大胃王')).height, lessThan(40));
+      expect(tester.getRect(find.byKey(const ValueKey('endless_progress'))).height, lessThan(24));
+      expect(find.byKey(const ValueKey('restart')), findsOneWidget);
+    });
+
     testWidgets('連續配對時，每組特效都會按時放完，不會因為前面的放完而重播', (tester) async {
       await pumpGame(tester);
       final g = mirror(0);
@@ -1684,6 +1734,28 @@ void main() {
       await runOutOfTime(tester);
       expect(store.endlessRounds, 2);
       expect(find.textContaining('🏆 成就達成'), findsNothing, reason: '已經達成過的不再顯示');
+    });
+
+    testWidgets('重新開始：確認後回到第 1 桌，分數和金幣都不保存', (tester) async {
+      await pumpEndless(tester);
+      final g = mirrorEndless();
+      for (var i = 0; i < 3; i++) {
+        await eatPair(tester, g);
+      }
+      expect(find.text('第 2 桌・最高分 1100'), findsOneWidget);
+      await tapAndSettle(tester, find.byKey(const ValueKey('restart')));
+      expect(find.text('重新開始這一輪？'), findsOneWidget);
+      await tapAndSettle(tester, find.text('繼續吃'));
+      expect(textOf(tester, 'score'), '1100', reason: '取消就繼續這一輪');
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('restart')));
+      await tapAndSettle(tester, find.byKey(const ValueKey('confirm_restart')));
+      expect(textOf(tester, 'score'), '0');
+      expect(textOf(tester, 'time'), '60');
+      expect(find.text('第 1 桌・最高分 0'), findsOneWidget);
+      expect(find.byKey(const ValueKey('card_4')), findsNothing, reason: '回到 2×2 的第 1 桌');
+      expect(store.endlessBest, 0);
+      expect(store.coins, 0);
     });
 
     testWidgets('中途離開要確認，分數和金幣都不保存', (tester) async {
