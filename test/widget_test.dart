@@ -375,12 +375,14 @@ void main() {
 
   group('ProgressStore', () {
     test('買卡背：金幣不夠買不了，買了會扣金幣並可換上', () async {
-      SharedPreferences.setMockInitialValues({'coins': 400});
+      final starry = skinById('starry');
+      final fortune = skinById('fortune');
+      final start = fortune.price + 100; // 買得起招財金，買不起夜空藍
+      expect(start, lessThan(starry.price));
+      SharedPreferences.setMockInitialValues({'coins': start});
       final store = await ProgressStore.load();
-      final starry = skinById('starry'); // 500
-      final fortune = skinById('fortune'); // 300
       expect(await store.buySkin(starry), isFalse);
-      expect(store.coins, 400);
+      expect(store.coins, start);
 
       expect(await store.buySkin(fortune), isTrue);
       expect(store.coins, 100);
@@ -406,7 +408,7 @@ void main() {
     });
 
     test('道具：買、用、數量不夠不能用', () async {
-      SharedPreferences.setMockInitialValues({'coins': 150});
+      SharedPreferences.setMockInitialValues({'coins': ItemType.hourglass.price + 50});
       final store = await ProgressStore.load();
       expect(await store.buyItem(ItemType.hourglass), isTrue);
       expect(store.coins, 50);
@@ -418,16 +420,17 @@ void main() {
     });
 
     test('裝備升級：扣金幣、滿級後不能再升', () async {
-      SharedPreferences.setMockInitialValues({'coins': 5000});
+      final costs = GearType.cart.costs;
+      SharedPreferences.setMockInitialValues({'coins': costs[0] + costs[1] + 300});
       final store = await ProgressStore.load();
-      expect(store.upgradeCost(GearType.cart), 500);
+      expect(store.upgradeCost(GearType.cart), costs[0]);
       expect(await store.upgradeGear(GearType.cart), isTrue);
-      expect(store.upgradeCost(GearType.cart), 1200);
+      expect(store.upgradeCost(GearType.cart), costs[1]);
       expect(await store.upgradeGear(GearType.cart), isTrue);
       expect(store.upgradeCost(GearType.cart), isNull);
       expect(await store.upgradeGear(GearType.cart), isFalse);
       expect(store.gearLevel(GearType.cart), 2);
-      expect(store.coins, 3300);
+      expect(store.coins, 300);
     });
 
     test('成就：要達成才能領，只能領一次，卡背獎勵不能用金幣買', () async {
@@ -457,22 +460,23 @@ void main() {
       final store = await ProgressStore.load();
       Achievement byId(String id) => achievements.firstWhere((a) => a.id == id);
 
-      expect(await store.recordEndlessScore(2400, matches: 20), isTrue);
-      expect(await store.recordEndlessScore(1800, matches: 55), isFalse, reason: '分數沒破紀錄');
-      expect(store.endlessBest, 2400);
-      expect(store.endlessBestMatches, 55, reason: '組數各自比較，沒破分數紀錄也會更新');
+      expect(await store.recordEndlessScore(24000, matches: 20), isTrue);
+      expect(await store.recordEndlessScore(18000, matches: 85), isFalse, reason: '分數沒破紀錄');
+      expect(store.endlessBest, 24000);
+      expect(store.endlessBestMatches, 85, reason: '組數各自比較，沒破分數紀錄也會更新');
       await store.recordEndlessRound();
       await store.recordEndlessRound();
       expect(store.endlessRounds, 2);
 
       expect(store.isAchieved(byId('endless_first')), isTrue);
-      expect(store.isAchieved(byId('endless_2000')), isTrue);
-      expect(store.isAchieved(byId('endless_5000')), isFalse);
-      expect(store.isAchieved(byId('endless_pairs50')), isTrue);
+      expect(store.isAchieved(byId('endless_20000')), isTrue);
+      expect(store.isAchieved(byId('endless_50000')), isFalse);
+      expect(store.isAchieved(byId('endless_pairs80')), isTrue);
       expect(store.isAchieved(byId('endless_rounds20')), isFalse);
 
-      await store.recordEndlessScore(10000);
-      expect(await store.claimAchievement(byId('endless_10000')), isTrue);
+      expect(await store.claimAchievement(byId('endless_100000')), isFalse, reason: '還不到 100000 分');
+      await store.recordEndlessScore(100000);
+      expect(await store.claimAchievement(byId('endless_100000')), isTrue);
       expect(store.ownedSkins, contains('gourmet'));
       expect(await store.buySkin(skinById('gourmet')), isFalse, reason: '成就限定卡背不能用金幣買');
 
@@ -892,6 +896,31 @@ void main() {
       expect(find.byType(MatchBurst), findsNothing);
     });
 
+    testWidgets('卡背：emoji 圖案放大，各種大小都不會超出卡背', (tester) async {
+      for (final id in ['boba', 'jade', 'tour']) {
+        expect(skinById(id).markScale, greaterThan(1), reason: '$id 的圖案要放大');
+      }
+      expect(skinById('fortune').markScale, 1, reason: '文字卡背維持原本大小');
+      for (final width in [36.0, 60.0, 110.0]) {
+        for (final skin in cardSkins) {
+          await tester.pumpWidget(MaterialApp(
+            home: Center(child: SizedBox(width: width, height: width * 4 / 3, child: CardBack(skin: skin, width: width))),
+          ));
+          expect(tester.takeException(), isNull, reason: '${skin.id} 寬 $width');
+          final mark = tester.getRect(find.text(skin.mark));
+          final card = tester.getRect(find.byType(CardBack));
+          expect(card.contains(mark.topLeft) && card.contains(mark.bottomRight - const Offset(0.01, 0.01)), isTrue,
+              reason: '${skin.id} 寬 $width 的圖案在卡背裡面');
+        }
+      }
+      // emoji 卡背的字級比文字卡背大
+      await tester.pumpWidget(MaterialApp(home: CardBack(skin: skinById('boba'), width: 100)));
+      final boba = tester.widget<Text>(find.text('🧋')).style!.fontSize!;
+      await tester.pumpWidget(MaterialApp(home: CardBack(skin: skinById('fortune'), width: 100)));
+      final fortune = tester.widget<Text>(find.text('福')).style!.fontSize!;
+      expect(boba, greaterThan(fortune));
+    });
+
     testWidgets('連續配對時，每組特效都會按時放完，不會因為前面的放完而重播', (tester) async {
       await pumpGame(tester);
       final g = mirror(0);
@@ -1050,17 +1079,18 @@ void main() {
     });
 
     testWidgets('商店：卡背金幣不夠會提示，買了就換上，成就卡背不能買', (tester) async {
-      await pumpHome(tester, saved: {'coins': 400});
+      final start = skinById('fortune').price + 100; // 買得起招財金，買不起夜空藍
+      await pumpHome(tester, saved: {'coins': start});
       await tapAndSettle(tester, find.byKey(const ValueKey('shop')));
       expect(find.text('夜市商店'), findsOneWidget);
       await tapAndSettle(tester, find.text('卡背'));
 
-      await tester.tap(find.byKey(const ValueKey('skin_starry'))); // 500，不夠
+      await tester.tap(find.byKey(const ValueKey('skin_starry'))); // 不夠
       await tester.pump();
-      expect(findCoinText('金幣不夠，還差 🪙 100'), findsOneWidget);
-      expect(store.coins, 400);
+      expect(findCoinText('金幣不夠，還差 🪙 ${skinById('starry').price - start}'), findsOneWidget);
+      expect(store.coins, start);
 
-      await tester.tap(find.byKey(const ValueKey('skin_fortune'))); // 300
+      await tester.tap(find.byKey(const ValueKey('skin_fortune')));
       await tester.pump();
       expect(store.coins, 100);
       expect(store.equippedSkin, 'fortune');
@@ -1073,13 +1103,15 @@ void main() {
     });
 
     testWidgets('商店：買道具、升級裝備', (tester) async {
-      await pumpHome(tester, saved: {'coins': 500});
+      final hat = GearType.hat.costs;
+      final start = ItemType.hourglass.price + hat[0] + 100;
+      await pumpHome(tester, saved: {'coins': start});
       await tapAndSettle(tester, find.byKey(const ValueKey('shop')));
 
       await tester.tap(find.byKey(const ValueKey('buy_hourglass')));
       await tester.pump();
       expect(store.itemCount(ItemType.hourglass), 1);
-      expect(store.coins, 400);
+      expect(store.coins, start - ItemType.hourglass.price);
       expect(find.text('沙漏（持有 1）'), findsOneWidget);
 
       await tapAndSettle(tester, find.text('裝備'));
@@ -1088,9 +1120,9 @@ void main() {
       expect(store.gearLevel(GearType.hat), 1);
       expect(store.coins, 100);
 
-      await tester.tap(find.byKey(const ValueKey('upgrade_hat'))); // 600，不夠
+      await tester.tap(find.byKey(const ValueKey('upgrade_hat'))); // 第二級不夠
       await tester.pump();
-      expect(findCoinText('金幣不夠，還差 🪙 500'), findsOneWidget);
+      expect(findCoinText('金幣不夠，還差 🪙 ${hat[1] - 100}'), findsOneWidget);
     });
 
     testWidgets('成就：達成會顯示紅點，領取後拿到金幣', (tester) async {
@@ -1625,7 +1657,7 @@ void main() {
       expect(g.score, 1100);
       await runOutOfTime(tester);
       expect(find.text('🏆 成就達成：開吃！'), findsOneWidget);
-      expect(find.text('🏆 成就達成：吃飽飽'), findsNothing, reason: '還不到 2000 分');
+      expect(find.text('🏆 成就達成：吃飽飽'), findsNothing, reason: '還不到 20000 分');
       expect(store.endlessRounds, 1);
       expect(store.endlessBestMatches, 3);
 
@@ -1639,14 +1671,14 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      for (var i = 0; i < 2; i++) {
+      // 續命後一路清桌，直到超過 20000 分（配對和清桌加的時間比花掉的多，時間夠用）
+      while (g.score < 20000) {
         await eatPair(tester, g);
       }
-      expect(g.score, 1100 + 400 + 1000 + 500, reason: '續命後清掉第 2 桌，再吃第 3 桌一組');
       await runOutOfTime(tester);
       expect(store.endlessRounds, 1, reason: '續命後再結算還是同一輪');
-      expect(store.endlessBest, 3000);
-      expect(find.text('🏆 成就達成：吃飽飽'), findsOneWidget, reason: '續命後才達到 2000 分');
+      expect(store.endlessBest, g.score);
+      expect(find.text('🏆 成就達成：吃飽飽'), findsOneWidget, reason: '續命後才達到 20000 分');
 
       await tapAndSettle(tester, find.text('再吃一輪'));
       await runOutOfTime(tester);

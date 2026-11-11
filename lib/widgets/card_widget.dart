@@ -123,12 +123,17 @@ class CardBack extends StatelessWidget {
           border: Border.all(color: skin.markColor.withValues(alpha: 0.5)),
         ),
         alignment: Alignment.center,
-        child: Text(
-          skin.mark,
-          style: TextStyle(
-            fontSize: width * 0.32,
-            fontWeight: FontWeight.w700,
-            color: skin.markColor.withValues(alpha: 0.9),
+        padding: const EdgeInsets.all(2),
+        // 小卡片放不下時縮小，不會超出卡背
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            skin.mark,
+            style: TextStyle(
+              fontSize: width * 0.32 * skin.markScale,
+              fontWeight: FontWeight.w700,
+              color: skin.markColor.withValues(alpha: 0.9),
+            ),
           ),
         ),
       ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 卡背造型：用金幣在商店解鎖。
+/// 卡背造型：用金幣在商店解鎖。價格當長期目標：兩種模式每分鐘約賺 400～800 枚，全部約 21,000 枚。
 class CardSkin {
   const CardSkin({
     required this.id,
@@ -11,6 +11,7 @@ class CardSkin {
     required this.mark,
     required this.markColor,
     this.achievementOnly = false,
+    this.markScale = 1,
   });
 
   /// 存檔用的識別碼，上架後不要改。
@@ -26,9 +27,15 @@ class CardSkin {
 
   /// 只能靠成就取得，不能用金幣買。
   final bool achievementOnly;
+
+  /// 卡背圖案的放大倍率。emoji 圖案四周有留白，看起來比文字小，要放大一點。
+  final double markScale;
 }
 
 const defaultSkinId = 'lantern';
+
+/// emoji 卡背圖案的放大倍率。
+const emojiMarkScale = 1.45;
 
 const cardSkins = <CardSkin>[
   CardSkin(
@@ -43,7 +50,7 @@ const cardSkins = <CardSkin>[
   CardSkin(
     id: 'fortune',
     name: '招財金',
-    price: 300,
+    price: 2000,
     base: Color(0xFFD9A21B),
     edge: Color(0xFFF5CB5C),
     mark: '福',
@@ -52,7 +59,7 @@ const cardSkins = <CardSkin>[
   CardSkin(
     id: 'starry',
     name: '夜空藍',
-    price: 500,
+    price: 4000,
     base: Color(0xFF27407A),
     edge: Color(0xFF4F6DB3),
     mark: '★',
@@ -61,20 +68,22 @@ const cardSkins = <CardSkin>[
   CardSkin(
     id: 'jade',
     name: '青草茶',
-    price: 800,
+    price: 6000,
     base: Color(0xFF2E7D5B),
     edge: Color(0xFF52A882),
-    mark: '茶',
+    mark: '🍵',
     markColor: Color(0xFFE9F7EF),
+    markScale: emojiMarkScale,
   ),
   CardSkin(
     id: 'boba',
     name: '珍奶控',
-    price: 1200,
+    price: 9000,
     base: Color(0xFF7A4A2E),
     edge: Color(0xFFA9714B),
     mark: '🧋',
     markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
   ),
   CardSkin(
     id: 'tour',
@@ -82,8 +91,9 @@ const cardSkins = <CardSkin>[
     price: 0,
     base: Color(0xFF1F6F8B),
     edge: Color(0xFF4FA3BF),
-    mark: '台',
+    mark: '🗺️',
     markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
     achievementOnly: true,
   ),
   CardSkin(
