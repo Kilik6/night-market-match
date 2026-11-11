@@ -13,6 +13,7 @@ import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
+import '../widgets/coin.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/match_effects.dart';
 import '../widgets/night_scaffold.dart';
@@ -167,7 +168,7 @@ class _GameScreenState extends State<GameScreen> {
   void _toast(String text) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text), duration: const Duration(seconds: 2)));
+      ..showSnackBar(SnackBar(content: CoinText(text), duration: const Duration(seconds: 2)));
   }
 
   void _leave() => Navigator.of(context).pop();
@@ -432,6 +433,7 @@ class _GameScreenState extends State<GameScreen> {
         adLabel: _game.canRevive ? '看廣告 +${MatchingGame.reviveSeconds} 秒繼續' : null,
         primaryLabel: '重新開始這一攤',
         leaveLabel: '回到夜市列表',
+        emphasizeAd: true,
       ),
     );
     if (!mounted) return;
@@ -676,6 +678,8 @@ class _GameScreenState extends State<GameScreen> {
                 ),
               for (final burst in _bursts)
                 Positioned(
+                  // key 要放在 Stack 的直接子元件上：前面的特效播完移除時，後面的才不會被當成新的重新播放
+                  key: ObjectKey(burst),
                   left: cardCenter(burst.card).dx - MatchBurst.size / 2,
                   top: cardCenter(burst.card).dy - MatchBurst.size / 2,
                   child: IgnorePointer(

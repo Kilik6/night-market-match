@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'coin.dart';
 
 /// 結算視窗的選項。
 enum ResultChoice { primary, watchAd, leave }
@@ -97,6 +98,7 @@ class ResultDialog extends StatelessWidget {
     required this.leaveLabel,
     this.adLabel,
     this.stars,
+    this.emphasizeAd = false,
   });
 
   final String title;
@@ -106,8 +108,53 @@ class ResultDialog extends StatelessWidget {
   final String? adLabel;
   final int? stars;
 
+  /// 主打廣告：廣告按鈕亮黃色實心，其他兩個按鈕改成黃色外框（時間到了的視窗用）。
+  /// 沒有廣告選項時照一般樣式。
+  final bool emphasizeAd;
+
+  static const _shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)));
+  static const _padding = EdgeInsets.symmetric(vertical: 12);
+
+  /// 黃色外框、不填滿的按鈕。
+  Widget _outlined(Key? key, String label, VoidCallback onPressed) => OutlinedButton(
+        key: key,
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: NightColors.ink,
+          side: const BorderSide(color: NightColors.glow, width: 2),
+          padding: _padding,
+          shape: _shape,
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+      );
+
+  /// 亮黃色實心的廣告按鈕，左邊有「廣告」小標籤。
+  Widget _filledAd(BuildContext context) => FilledButton(
+        key: const ValueKey('dialog_ad'),
+        onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
+        style: FilledButton.styleFrom(
+          backgroundColor: NightColors.glow,
+          foregroundColor: NightColors.ink,
+          padding: _padding,
+          shape: _shape,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: NightColors.ink, borderRadius: BorderRadius.circular(4)),
+              child: const Text('廣告', style: TextStyle(fontSize: 11, color: NightColors.paper)),
+            ),
+            const SizedBox(width: 8),
+            Flexible(child: Text(adLabel!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final adFirst = emphasizeAd && adLabel != null;
     return Dialog(
       backgroundColor: NightColors.paper,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -132,33 +179,43 @@ class ResultDialog extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             for (final line in lines)
-              Text(line, textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
+              CoinText(line, textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
             const SizedBox(height: 16),
-            if (adLabel != null) ...[
-              AdButton(
-                key: const ValueKey('dialog_ad'),
-                label: adLabel!,
-                onPaper: true,
-                onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
-              ),
+            if (adFirst) ...[
+              _filledAd(context),
               const SizedBox(height: 10),
-            ],
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(ResultChoice.primary),
-              style: FilledButton.styleFrom(
-                backgroundColor: NightColors.glow,
-                foregroundColor: NightColors.ink,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              _outlined(null, primaryLabel, () => Navigator.of(context).pop(ResultChoice.primary)),
+              const SizedBox(height: 10),
+              _outlined(
+                  const ValueKey('dialog_leave'), leaveLabel, () => Navigator.of(context).pop(ResultChoice.leave)),
+              const SizedBox(height: 8),
+            ] else ...[
+              if (adLabel != null) ...[
+                AdButton(
+                  key: const ValueKey('dialog_ad'),
+                  label: adLabel!,
+                  onPaper: true,
+                  onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
+                ),
+                const SizedBox(height: 10),
+              ],
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(ResultChoice.primary),
+                style: FilledButton.styleFrom(
+                  backgroundColor: NightColors.glow,
+                  foregroundColor: NightColors.ink,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(primaryLabel, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
               ),
-              child: Text(primaryLabel, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            ),
-            const SizedBox(height: 4),
-            TextButton(
-              key: const ValueKey('dialog_leave'),
-              onPressed: () => Navigator.of(context).pop(ResultChoice.leave),
-              child: Text(leaveLabel, style: const TextStyle(color: NightColors.ink)),
-            ),
+              const SizedBox(height: 4),
+              TextButton(
+                key: const ValueKey('dialog_leave'),
+                onPressed: () => Navigator.of(context).pop(ResultChoice.leave),
+                child: Text(leaveLabel, style: const TextStyle(color: NightColors.ink)),
+              ),
+            ],
           ],
         ),
       ),

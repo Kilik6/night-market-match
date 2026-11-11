@@ -6,6 +6,7 @@ import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
+import '../widgets/coin.dart';
 import '../widgets/night_scaffold.dart';
 
 /// 夜市商店：道具、裝備、卡背三個分頁。
@@ -25,7 +26,7 @@ class _ShopScreenState extends State<ShopScreen> {
   void _toast(String text) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text), duration: const Duration(seconds: 2)));
+      ..showSnackBar(SnackBar(content: CoinText(text), duration: const Duration(seconds: 2)));
   }
 
   void _notEnough(int price) => _toast('金幣不夠，還差 🪙 ${price - _store.coins}');
@@ -139,7 +140,7 @@ class _ShopScreenState extends State<ShopScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      child: CoinText(label, style: const TextStyle(fontWeight: FontWeight.w700)),
     );
   }
 

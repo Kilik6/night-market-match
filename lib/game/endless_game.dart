@@ -4,28 +4,20 @@ import 'items.dart';
 import 'matching_game.dart' show MatchingGame, PickResult;
 import 'night_market_data.dart';
 
-/// 「夜市大胃王」無盡模式的純邏輯：配對成功的兩張牌消掉後補上新牌，一直玩到時間用完，比最高分。
+/// 「夜市大胃王」無盡模式的純邏輯：一桌一桌清，清完一桌拿清桌獎勵、發下一桌，一直吃到時間用完，比最高分。
 ///
-/// 補牌規則（防止玩家鑽漏洞、也不會卡死）：
-/// - 同一批補上的牌，彼此一定不是一對。否則玩家看到哪兩格剛補牌，就知道它們是一對。
-/// - 桌上隨時至少有 [minPairsOnBoard] 組完整的對子，不會出現每張都落單、怎麼翻都配不到的死局。
-/// - 同一種小吃在桌上最多兩張。
-/// - 補上的牌可能是桌上落單牌的另一半，也可能是新的小吃（它的另一半之後才會出現），
-///   所以玩家要一直記住還沒配到的牌。
-///
-/// 配對成功的牌先留在桌上（[isMatched]）讓畫面放特效，畫面要呼叫 [refill] 才會補新牌，
-/// 做法和翻錯後由畫面呼叫 [hideMismatched] 一樣。
+/// - 配對成功的牌消掉，位置空著，不補牌。
+/// - 整桌清空時加清桌獎勵（[clearBonusFor]）和 [clearBonusSeconds] 秒，並暫停計時，
+///   畫面放完清桌動畫後呼叫 [nextTable] 發下一桌。
+/// - 越後面的桌牌越多（[cardsForTable]），最多 16 張。
 class EndlessGame {
   EndlessGame({
     List<Food> pool = foods,
     Random? random,
-    this.boardSize = 16,
     this.bonusSeconds = 0,
     this.comboCap = MatchingGame.defaultComboCap,
     this.coinMultiplier = 1,
-  })  : assert(boardSize.isEven),
-        assert(boardSize ~/ 2 + 2 <= startKinds, '開局的小吃種類要比棋盤一半多 2 種，補牌才一定有新小吃可放'),
-        assert(pool.length >= startKinds, '小吃種類至少要 $startKinds 種'),
+  })  : assert(pool.length >= maxCards ~/ 2, '小吃種類至少要 ${maxCards ~/ 2} 種'),
         _pool = pool,
         _random = random ?? Random() {
     reset();
@@ -37,17 +29,12 @@ class EndlessGame {
   static const hourglassSeconds = 10;
   static const luckyCatMultiplier = 1.5;
 
-  /// 桌上至少要有幾組完整的對子。
-  static const minPairsOnBoard = 2;
+  /// 每一桌最多幾張牌。
+  static const maxCards = 16;
 
-  /// 一開始用幾種小吃。至少要比棋盤一半多 2 種，補牌時才一定有新小吃可以放。
-  static const startKinds = 10;
-
-  /// 每配對幾組，多加一種小吃。
-  static const matchesPerNewKind = 8;
-
-  /// 桌上落單牌的目標數量上限。
-  static const maxTargetSingles = 6;
+  /// 清桌獎勵：每一桌 [clearBonusPerTable] × 第幾桌，再加 [clearBonusSeconds] 秒。
+  static const clearBonusPerTable = 500;
+  static const clearBonusSeconds = 5;
 
   /// 連續翻錯幾次就給老闆提示。
   static const bossHintAfterMisses = 2;
@@ -55,11 +42,32 @@ class EndlessGame {
   /// 老闆提示後至少要再配對幾組才會再提示，避免故意亂翻拿答案。
   static const bossHintCooldownMatches = 3;
 
-  /// 補牌時有這個機率不照目標走，讓補牌不會太好預測。
-  static const surpriseChance = 0.2;
+  /// 每多少分換 1 枚金幣。比關卡（÷10）少一半，避免無盡模式被拿來刷金幣。
+  static const scorePerCoin = 20;
 
-  /// 棋盤張數。
-  final int boardSize;
+  /// 第幾桌有幾張牌：第 1～2 桌 2×2、第 3～5 桌 3×2、第 6～9 桌 4×2、第 10 桌起 4×4。
+  static int cardsForTable(int table) {
+    if (table <= 2) return 4;
+    if (table <= 5) return 6;
+    if (table <= 9) return 8;
+    return maxCards;
+  }
+
+  /// 第幾桌排成幾欄。
+  static int columnsForTable(int table) => switch (cardsForTable(table)) {
+        4 => 2,
+        6 => 3,
+        _ => 4,
+      };
+
+  static int clearBonusFor(int table) => clearBonusPerTable * table;
+
+  /// 配對成功會加幾秒：前 20 組 +3 秒，第 21～50 組 +2 秒，之後 +1 秒。
+  static int timeGainFor(int matchesSoFar) {
+    if (matchesSoFar < 20) return 3;
+    if (matchesSoFar < 50) return 2;
+    return 1;
+  }
 
   /// 裝備「老闆的帽子」多出來的秒數，起始時間和時間上限都會加。
   final int bonusSeconds;
@@ -73,17 +81,17 @@ class EndlessGame {
   final List<Food> _pool;
   final Random _random;
 
-  /// 這一局小吃出場的順序，前 [activeKinds] 種是目前會出現的。
-  late List<Food> _kindOrder;
+  /// 第幾桌（從 1 開始）。
+  int table = 1;
 
   late List<Food> cards;
   late List<bool> isOpen;
 
-  /// 已配對、等待 [refill] 補新牌的格子。
+  /// 已配對（消掉）的格子，位置空著。
   late List<bool> isMatched;
 
-  /// 這張牌玩家看過了沒（翻過、開局翻牌、偷看、老闆提示都算）。沒看過的牌卡背會標「新」。
-  late List<bool> isSeen;
+  /// 這一桌清空了，等畫面放完清桌動畫呼叫 [nextTable]。這段時間不能翻牌、不倒數。
+  bool tableCleared = false;
 
   /// 連續翻錯幾次，配對成功就歸零。
   int consecutiveMisses = 0;
@@ -99,6 +107,9 @@ class EndlessGame {
 
   /// 這一局配對成功的組數。
   int matches = 0;
+
+  /// 這一局清了幾桌。
+  int tablesCleared = 0;
   int timeLeft = 0;
   bool isEnded = false;
 
@@ -106,7 +117,7 @@ class EndlessGame {
   bool hintUsed = false;
   bool isPeeking = false;
 
-  /// 開局翻開全部牌讓玩家記位置，這段時間不能翻牌、不倒數、不能偷看。
+  /// 每一桌開始時翻開全部牌讓玩家記位置，這段時間不能翻牌、不倒數、不能偷看。
   bool isPreviewing = false;
 
   /// 看廣告「+15 秒繼續」：每局一次。
@@ -134,35 +145,26 @@ class EndlessGame {
   int lastCombo = 1;
   int lastTimeGain = 0;
 
-  /// 最近一次 [refill] 補上新牌的格子（畫面放發牌動畫用）。
-  List<int> lastRefilled = const [];
+  /// 最近一次清桌拿到的分數。
+  int lastClearBonus = 0;
 
-  /// 兩張翻錯、等待蓋回去的期間為 true，這段時間不能再翻牌。
-  bool get isLocked => secondPickedIndex != null || isPeeking || isPreviewing;
+  int get boardSize => cards.length;
+  int get columns => columnsForTable(table);
 
-  bool get canPeek => !hintUsed && !isEnded && !isPreviewing;
+  /// 翻錯等待蓋回去、偷看、翻牌記憶、清桌動畫期間不能翻牌。
+  bool get isLocked => secondPickedIndex != null || isPeeking || isPreviewing || tableCleared;
+
+  bool get canPeek => !hintUsed && !isEnded && !isPreviewing && !tableCleared;
   bool get canRevive => isEnded && !revived;
 
-  /// 時間上限。配對加秒數不會超過這個值（沙漏可以超過）。
+  /// 時間上限。配對、清桌加的秒數不會超過這個值（沙漏可以超過）。
   int get maxSeconds => startSeconds + bonusSeconds;
 
-  /// 目前會出現幾種小吃。
-  int get activeKinds => min(_pool.length, startKinds + matches ~/ matchesPerNewKind);
-
-  /// 下一次配對成功會加幾秒：前 20 組 +3 秒，第 21～50 組 +2 秒，之後 +1 秒。
+  /// 下一次配對成功會加幾秒。
   int get nextTimeGain => timeGainFor(matches);
 
-  static int timeGainFor(int matchesSoFar) {
-    if (matchesSoFar < 20) return 3;
-    if (matchesSoFar < 50) return 2;
-    return 1;
-  }
-
-  /// 補牌時希望桌上有幾張落單牌，越後面越多，要記的東西越多。
-  int get targetSingles => min(maxTargetSingles, 2 + matches ~/ 10);
-
-  /// 每多少分換 1 枚金幣。比關卡（÷10）少一半，避免無盡模式被拿來刷金幣。
-  static const scorePerCoin = 20;
+  /// 這一桌還剩幾組沒配。
+  int get pairsLeft => isMatched.where((m) => !m).length ~/ 2;
 
   /// 結算金幣：遊戲結束後才有。
   int get coinsEarned {
@@ -170,42 +172,20 @@ class EndlessGame {
     return (score / scorePerCoin * coinMultiplier * (luckyCatActive ? luckyCatMultiplier : 1)).round();
   }
 
-  /// 還在桌上（未配對）的各種小吃張數。
-  Map<Food, int> get _counts {
-    final counts = <Food, int>{};
-    for (var i = 0; i < cards.length; i++) {
-      if (!isMatched[i]) counts.update(cards[i], (c) => c + 1, ifAbsent: () => 1);
-    }
-    return counts;
-  }
-
-  /// 桌上有幾組完整的對子。
-  int get pairsOnBoard => _counts.values.where((c) => c == 2).length;
-
-  /// 桌上有幾張落單的牌（另一半還沒出現）。
-  int get singlesOnBoard => _counts.values.where((c) => c == 1).length;
-
   void reset() {
-    _kindOrder = _pool.toList()..shuffle(_random);
-    // 開局跟一般關卡一樣全是成對的牌，從一開始的 startKinds 種裡挑
-    final pairs = (_kindOrder.take(startKinds).toList()..shuffle(_random)).take(boardSize ~/ 2).toList();
-    cards = [...pairs, ...pairs]..shuffle(_random);
-    isOpen = List.filled(boardSize, false);
-    isMatched = List.filled(boardSize, false);
-    isSeen = List.filled(boardSize, false);
+    table = 1;
+    _dealTable();
     consecutiveMisses = 0;
     matchesSinceBossHint = bossHintCooldownMatches; // 第一次不用等冷卻
-    firstPickedIndex = null;
-    secondPickedIndex = null;
     steps = 0;
     score = 0;
     combo = 1;
     matches = 0;
+    tablesCleared = 0;
     timeLeft = maxSeconds;
     isEnded = false;
     hintUsed = false;
     isPeeking = false;
-    isPreviewing = false;
     revived = false;
     mistakes = 0;
     bestCombo = 0;
@@ -217,14 +197,33 @@ class EndlessGame {
     lastPoints = 0;
     lastCombo = 1;
     lastTimeGain = 0;
-    lastRefilled = const [];
+    lastClearBonus = 0;
+  }
+
+  /// 依目前的 [table] 發一桌全新的牌，全部成對。
+  void _dealTable() {
+    final picks = (_pool.toList()..shuffle(_random)).take(cardsForTable(table) ~/ 2).toList();
+    cards = [...picks, ...picks]..shuffle(_random);
+    isOpen = List.filled(cards.length, false);
+    isMatched = List.filled(cards.length, false);
+    firstPickedIndex = null;
+    secondPickedIndex = null;
+    isPreviewing = false;
+    isPeeking = false;
+    tableCleared = false;
+  }
+
+  /// 清桌動畫放完後呼叫：發下一桌，計時繼續（畫面會先翻牌讓玩家記）。
+  void nextTable() {
+    if (!tableCleared) return;
+    table++;
+    _dealTable();
   }
 
   PickResult pick(int index) {
     if (isEnded || isLocked || isMatched[index] || isOpen[index]) return PickResult.ignored;
 
     isOpen[index] = true;
-    isSeen[index] = true;
     steps++;
 
     final first = firstPickedIndex;
@@ -234,8 +233,7 @@ class EndlessGame {
     }
 
     if (cards[first] == cards[index]) {
-      _match(first, index);
-      return PickResult.matched;
+      return _match(first, index);
     }
 
     secondPickedIndex = index;
@@ -249,7 +247,8 @@ class EndlessGame {
     return PickResult.mismatched;
   }
 
-  void _match(int a, int b) {
+  /// 配對成功；最後一組時清桌並回傳 [PickResult.finished]。
+  PickResult _match(int a, int b) {
     isOpen[a] = true;
     isOpen[b] = true;
     isMatched[a] = true;
@@ -264,73 +263,39 @@ class EndlessGame {
     combo = min(combo + 1, comboCap);
 
     lastTimeGain = nextTimeGain;
-    // 加秒數不超過上限，但沙漏加超過上限的時間也不會被扣回去
-    timeLeft = max(timeLeft, min(maxSeconds, timeLeft + lastTimeGain));
+    _addTime(lastTimeGain);
     matches++;
     consecutiveMisses = 0;
     matchesSinceBossHint++;
+
+    if (pairsLeft > 0) return PickResult.matched;
+    tableCleared = true;
+    tablesCleared++;
+    lastClearBonus = clearBonusFor(table);
+    score += lastClearBonus;
+    _addTime(clearBonusSeconds);
+    return PickResult.finished;
   }
 
-  /// 把已配對的格子補上新牌（畫面放完配對特效後呼叫）。回傳補了哪些格子。
-  List<int> refill() {
-    final slots = [for (var i = 0; i < boardSize; i++) if (isMatched[i]) i]..shuffle(_random);
-    final batch = <Food>{};
-    for (final i in slots) {
-      final food = _chooseRefill(batch);
-      cards[i] = food;
-      isMatched[i] = false;
-      isOpen[i] = false;
-      isSeen[i] = false;
-      batch.add(food);
-    }
-    lastRefilled = slots..sort();
-    return lastRefilled;
-  }
-
-  /// 選一張要補上的牌。[batch] 是這一批已經補上的小吃，它們的另一半這一批不能出現。
-  Food _chooseRefill(Set<Food> batch) {
-    final counts = _counts;
-    final pairs = counts.values.where((c) => c == 2).length;
-    final singles = counts.values.where((c) => c == 1).length;
-
-    // 可以補成一對的：桌上落單、而且不是這一批剛補上的
-    final partners = [
-      for (final e in counts.entries)
-        if (e.value == 1 && !batch.contains(e.key)) e.key,
-    ];
-    // 可以當新小吃的：目前會出現、桌上一張都沒有的
-    final fresh = [
-      for (final f in _kindOrder.take(activeKinds))
-        if (!counts.containsKey(f)) f,
-    ];
-
-    Food pickFrom(List<Food> list) => list[_random.nextInt(list.length)];
-
-    // 對子不夠就先補成對，避免死局
-    if (pairs < minPairsOnBoard && partners.isNotEmpty) return pickFrom(partners);
-
-    var wantFresh = singles < targetSingles;
-    if (_random.nextDouble() < surpriseChance) wantFresh = !wantFresh;
-
-    if (wantFresh && fresh.isNotEmpty) return pickFrom(fresh);
-    if (partners.isNotEmpty) return pickFrom(partners);
-    if (fresh.isNotEmpty) return pickFrom(fresh);
-    // 依 startKinds 和棋盤大小的設定不會走到這裡，測試會檢查
-    throw StateError('沒有可以補的牌');
-  }
+  /// 加秒數不超過上限，但沙漏加超過上限的時間也不會被扣回去。
+  void _addTime(int seconds) => timeLeft = max(timeLeft, min(maxSeconds, timeLeft + seconds));
 
   bool canUseItem(ItemType type) {
     if (isEnded || usedItems.contains(type)) return false;
     return type != ItemType.magnifier || !isLocked;
   }
 
-  /// 使用道具。不能用時回傳 false。放大鏡配對後畫面要呼叫 [refill]。
+  /// 使用道具。不能用時回傳 false。放大鏡配到最後一組時會清桌，要看 [tableCleared]。
   bool useItem(ItemType type) {
     if (!canUseItem(type)) return false;
     usedItems.add(type);
     switch (type) {
       case ItemType.magnifier:
-        _magnify();
+        // 已經翻開一張就配那一張，否則配第一組還沒配對的牌（每一桌都是成對的，一定找得到）
+        final a = firstPickedIndex ?? isMatched.indexOf(false);
+        final b = List.generate(cards.length, (i) => i)
+            .firstWhere((i) => i != a && !isMatched[i] && cards[i] == cards[a]);
+        _match(a, b);
       case ItemType.hourglass:
         timeLeft += hourglassSeconds;
       case ItemType.charm:
@@ -339,36 +304,6 @@ class EndlessGame {
         luckyCatActive = true;
     }
     return true;
-  }
-
-  /// 放大鏡：已經翻開一張、而且另一半在桌上就配那一張；
-  /// 否則把翻開的那張蓋回去，配桌上任一組完整的對子。
-  void _magnify() {
-    int? partnerOf(int a) {
-      for (var i = 0; i < boardSize; i++) {
-        if (i != a && !isMatched[i] && cards[i] == cards[a]) return i;
-      }
-      return null;
-    }
-
-    final first = firstPickedIndex;
-    if (first != null) {
-      final partner = partnerOf(first);
-      if (partner != null) {
-        _match(first, partner);
-        return;
-      }
-      isOpen[first] = false;
-      firstPickedIndex = null;
-    }
-    for (var a = 0; a < boardSize; a++) {
-      if (isMatched[a]) continue;
-      final b = partnerOf(a);
-      if (b != null) {
-        _match(a, b);
-        return;
-      }
-    }
   }
 
   /// 翻錯後把兩張牌蓋回去（畫面會在延遲後呼叫）。
@@ -382,11 +317,8 @@ class EndlessGame {
     secondPickedIndex = null;
   }
 
-  /// 開局翻開全部牌讓玩家記位置，倒數結束畫面呼叫 [endPreview] 蓋回去。不會用掉偷看的機會。
-  void startPreview() {
-    isPreviewing = true;
-    _seeAll();
-  }
+  /// 每一桌開始時翻開全部牌讓玩家記位置，倒數結束畫面呼叫 [endPreview] 蓋回去。不會用掉偷看的機會。
+  void startPreview() => isPreviewing = true;
 
   void endPreview() => isPreviewing = false;
 
@@ -396,18 +328,10 @@ class EndlessGame {
     hideMismatched();
     hintUsed = true;
     isPeeking = true;
-    _seeAll();
     return true;
   }
 
-  void _seeAll() {
-    for (var i = 0; i < boardSize; i++) {
-      isSeen[i] = true;
-    }
-  }
-
-  /// 這張牌要不要標「新」：還在桌上、玩家還沒看過。
-  bool isNew(int index) => !isMatched[index] && !isSeen[index];
+  void endPeek() => isPeeking = false;
 
   /// 連續翻錯 [bossHintAfterMisses] 次、而且過了冷卻，就挑桌上一組對子告訴玩家（畫面在翻錯的牌蓋回去後呼叫）。
   /// 回傳那兩張牌的位置；不符合條件回傳 null。
@@ -422,16 +346,12 @@ class EndlessGame {
       }
     }
     if (pairs.isEmpty) return null;
-    // 不用 _random 挑，免得打亂之後補牌的順序；用配對和翻錯次數輪流挑，每次提示的位置不一樣
+    // 不用 _random 挑，免得打亂之後發牌的結果；用配對和翻錯次數輪流挑，每次提示的位置不一樣
     final hint = pairs[(matches + mistakes) % pairs.length];
     consecutiveMisses = 0;
     matchesSinceBossHint = 0;
-    isSeen[hint[0]] = true;
-    isSeen[hint[1]] = true;
     return hint;
   }
-
-  void endPeek() => isPeeking = false;
 
   /// 畫面要不要顯示這張牌的正面。
   bool isFaceUp(int index) => isPeeking || isPreviewing || isOpen[index];
@@ -446,9 +366,9 @@ class EndlessGame {
     return true;
   }
 
-  /// 每秒呼叫一次。時間到回傳 true。
+  /// 每秒呼叫一次。時間到回傳 true。翻牌記憶、清桌動畫期間不倒數。
   bool tick() {
-    if (isEnded || isPreviewing) return false;
+    if (isEnded || isPreviewing || tableCleared) return false;
     timeLeft = max(0, timeLeft - 1);
     if (timeLeft == 0) {
       isEnded = true;

@@ -47,12 +47,23 @@ class EndlessScreen extends StatefulWidget {
 
 /// 一個進行中的配對特效。
 class _Burst {
-  _Burst({required this.card, required this.intensity, required this.seed, this.label, this.sublabel, this.at});
+  _Burst({
+    required this.card,
+    required this.intensity,
+    required this.seed,
+    this.label,
+    this.sublabel,
+    this.at,
+    this.relative,
+  });
 
   final int card;
 
   /// 特效中心點；沒指定就放在 [card] 那張牌上。
   final Offset? at;
+
+  /// 依牌桌大小的相對位置（0～1），清桌煙火用。
+  final Offset? relative;
   final int intensity;
   final int seed;
   final String? label;
@@ -73,8 +84,29 @@ class _Merge {
 class _EndlessScreenState extends State<EndlessScreen> {
   static const peekDuration = Duration(seconds: 2);
 
-  /// 配對成功後，牌留在桌上發光多久才補新牌。
-  static const refillDelay = Duration(milliseconds: 650);
+  /// 新的一桌翻開讓玩家記的秒數（第一桌用 [EndlessScreen.previewSeconds]）。
+  static const nextTablePreviewSeconds = 3;
+
+  /// 清桌動畫播多久才發下一桌。
+  static const clearCelebration = Duration(milliseconds: 1600);
+
+  /// 清桌煙火：依序在牌桌各處炸開的位置（相對牌桌大小）和大小。
+  static const fireworks = <(Offset, int)>[
+    (Offset(0.5, 0.5), 10),
+    (Offset(0.18, 0.2), 7),
+    (Offset(0.82, 0.22), 8),
+    (Offset(0.25, 0.78), 8),
+    (Offset(0.78, 0.8), 7),
+    (Offset(0.5, 0.12), 9),
+    (Offset(0.08, 0.5), 6),
+    (Offset(0.92, 0.5), 6),
+    (Offset(0.5, 0.9), 9),
+    (Offset(0.35, 0.38), 7),
+    (Offset(0.65, 0.62), 8),
+  ];
+
+  /// 每發煙火間隔多久。要讓最後一發在清桌動畫結束前放完，不要拖到下一桌翻牌的時候。
+  static const fireworkInterval = Duration(milliseconds: 55);
 
   /// 相撞時在兩張牌中間放特效、飄分數。
   void _onCollide(_Merge m, Offset at) {
@@ -97,7 +129,10 @@ class _EndlessScreenState extends State<EndlessScreen> {
   Timer? _clock;
   Timer? _hideTimer;
   Timer? _peekTimer;
-  Timer? _refillTimer;
+  Timer? _clearTimer;
+
+  /// 清桌時依序施放煙火的計時器。
+  final List<Timer> _fireworkTimers = [];
   Timer? _previewTimer;
   Timer? _bossHintTimer;
 
@@ -116,14 +151,11 @@ class _EndlessScreenState extends State<EndlessScreen> {
   final List<_Merge> _merges = [];
   int _burstCount = 0;
 
-  /// 每一格發過幾次牌。補牌時加一，讓那一格整張重建並播放發牌動畫。
-  late List<int> _dealt;
+  /// 正在播放清桌動畫。
+  bool _showClear = false;
 
   /// 這一輪開始前的最高分，用來判斷有沒有破紀錄。
   int _bestAtStart = 0;
-
-  /// 上一次配對前開放幾種小吃，用來提示「新攤位開張」。
-  int _kindsBeforeLastMatch = EndlessGame.startKinds;
 
   /// 這一輪開始前已達成的成就，用來判斷這輪新達成了哪些。
   Set<String> _achievedAtStart = {};
@@ -154,7 +186,11 @@ class _EndlessScreenState extends State<EndlessScreen> {
     _clock?.cancel();
     _hideTimer?.cancel();
     _peekTimer?.cancel();
-    _refillTimer?.cancel();
+    _clearTimer?.cancel();
+    for (final t in _fireworkTimers) {
+      t.cancel();
+    }
+    _fireworkTimers.clear();
     _previewTimer?.cancel();
     _bossHintTimer?.cancel();
   }
@@ -171,20 +207,21 @@ class _EndlessScreenState extends State<EndlessScreen> {
       comboCap: GearEffects.comboCap(_store.gearLevel(GearType.cart)),
       coinMultiplier: GearEffects.coinMultiplier(_store.gearLevel(GearType.abacus)),
     );
-    _dealt = List.filled(_game.boardSize, 0);
+    _showClear = false;
     _bestAtStart = _store.endlessBest;
-    _kindsBeforeLastMatch = _game.activeKinds;
     _achievedAtStart = {for (final a in achievements) if (_store.isAchieved(a)) a.id};
     _roundCounted = false;
     _message = _intro;
-    _startPreview();
+    _startPreview(widget.previewSeconds, startClockAfter: true);
   }
 
-  /// 開局先把牌全部翻開 [previewSeconds] 秒讓玩家記位置，蓋回去後才開始倒數。
-  void _startPreview() {
-    _previewLeft = widget.previewSeconds;
+  /// 每一桌開始先把牌全部翻開 [seconds] 秒讓玩家記位置，蓋回去後才計時。
+  /// 第一桌結束後才開始計時；之後的桌計時器已經在跑，翻牌期間 [EndlessGame.tick] 不會倒數。
+  void _startPreview(int seconds, {required bool startClockAfter}) {
+    _previewTimer?.cancel();
+    _previewLeft = seconds;
     if (_previewLeft <= 0) {
-      _startClock();
+      if (startClockAfter) _startClock();
       return;
     }
     // 牌全部翻開，牌桌中央的提示框倒數
@@ -197,9 +234,9 @@ class _EndlessScreenState extends State<EndlessScreen> {
       timer.cancel();
       setState(() {
         _game.endPreview();
-        _message = _intro;
+        _message = _game.table == 1 ? _intro : '第 ${_game.table} 桌，開吃！';
       });
-      _startClock();
+      if (startClockAfter) _startClock();
     });
   }
 
@@ -326,7 +363,6 @@ class _EndlessScreenState extends State<EndlessScreen> {
   /// 配對成功（翻牌或放大鏡）：特效、音效、提示、圖鑑紀錄，稍後補上新牌。
   void _onMatched() {
     final food = _game.lastMatched!;
-    final kindsBefore = _kindsBeforeLastMatch;
     final reduceMotion = MediaQuery.of(context).disableAnimations;
     if (!reduceMotion) {
       _merges.add(_Merge(
@@ -345,24 +381,47 @@ class _EndlessScreenState extends State<EndlessScreen> {
       final head = _game.lastCombo > 1
           ? '${food.name}！${_game.lastCombo} 連擊 +${_game.lastPoints}・$time'
           : '${food.name} +${_game.lastPoints}・$time';
-      if (_game.activeKinds > kindsBefore) {
-        _message = '又有新攤位開張了！';
-      } else {
-        _message = isNew ? '$head・收錄圖鑑' : head;
-      }
+      _message = isNew ? '$head・收錄圖鑑' : head;
     });
-    _kindsBeforeLastMatch = _game.activeKinds;
-    // 相撞動畫播完再補新牌（減少動態效果時只發光一下）；連續配對時只補一次就會把空格都補滿
-    _refillTimer?.cancel();
-    _refillTimer = Timer(reduceMotion ? refillDelay : _MergeFly.duration, _refill);
+    // 最後一組：相撞動畫播完放清桌動畫
+    if (_game.tableCleared) {
+      _clearTimer?.cancel();
+      _clearTimer = Timer(reduceMotion ? const Duration(milliseconds: 300) : _MergeFly.duration, _celebrateClear);
+    }
   }
 
-  void _refill() {
+  /// 清桌：大分數、大特效，播完發下一桌。
+  void _celebrateClear() {
+    if (!mounted) return;
+    _sounds.play(Sfx.win);
+    setState(() {
+      _showClear = true;
+      _bossHint = const [];
+      _message = '清桌！第 ${_game.table} 桌 +${_game.lastClearBonus}・+${EndlessGame.clearBonusSeconds} 秒';
+    });
+    if (!MediaQuery.of(context).disableAnimations) {
+      // 一發一發在牌桌各處炸開
+      for (var k = 0; k < fireworks.length; k++) {
+        final (at, intensity) = fireworks[k];
+        _fireworkTimers.add(Timer(fireworkInterval * k, () {
+          if (!mounted) return;
+          setState(() => _bursts.add(_Burst(card: 0, intensity: intensity, seed: _burstCount++, relative: at)));
+        }));
+      }
+    }
+    _clearTimer = Timer(clearCelebration, _nextTable);
+  }
+
+  /// 發下一桌，翻牌讓玩家記（計時器繼續跑，但翻牌期間不倒數）。
+  void _nextTable() {
     if (!mounted) return;
     setState(() {
-      for (final i in _game.refill()) {
-        _dealt[i]++;
-      }
+      _showClear = false;
+      _game.nextTable();
+    });
+    _startPreview(widget.previewSeconds > 0 ? nextTablePreviewSeconds : 0, startClockAfter: false);
+    setState(() {
+      if (!_game.isPreviewing) _message = '第 ${_game.table} 桌，開吃！';
     });
   }
 
@@ -449,8 +508,6 @@ class _EndlessScreenState extends State<EndlessScreen> {
 
   /// 時間到：先存最高分（看廣告續命後分數只會更高），再問要續命、再一輪還是離開。
   Future<void> _showEndDialog() async {
-    _refillTimer?.cancel();
-    _refill(); // 最後一組的空格補起來，續命時桌面才是完整的（走發牌動畫，不會翻出新牌的正面）
     await _store.recordEndlessScore(_game.score, matches: _game.matches);
     if (!_roundCounted) {
       _roundCounted = true;
@@ -466,7 +523,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
       builder: (context) => ResultDialog(
         title: isRecord ? '新紀錄！吃飽收攤' : '吃飽收攤',
         lines: [
-          '吃了 ${_game.matches} 組小吃，最高 ${_game.bestCombo} 連擊',
+          '清了 ${_game.tablesCleared} 桌、吃了 ${_game.matches} 組，最高 ${_game.bestCombo} 連擊',
           '總分 ${_game.score}',
           if (isRecord) '刷新最高分！（原本 $_bestAtStart）' else '最高分 ${_store.endlessBest}',
           '獲得 🪙 $coins',
@@ -475,6 +532,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
         adLabel: _game.canRevive ? '看廣告 +${EndlessGame.reviveSeconds} 秒繼續吃' : null,
         primaryLabel: '再吃一輪',
         leaveLabel: '回到首頁',
+        emphasizeAd: true,
       ),
     );
     if (!mounted) return;
@@ -602,7 +660,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
                   ),
                 ),
                 Text(
-                  '已吃 ${_game.matches} 組・最高分 ${max(_store.endlessBest, _game.score)}',
+                  '第 ${_game.table} 桌・最高分 ${max(_store.endlessBest, _game.score)}',
                   key: const ValueKey('endless_progress'),
                   style: const TextStyle(color: NightColors.mist, fontSize: 13, letterSpacing: 1),
                 ),
@@ -666,28 +724,40 @@ class _EndlessScreenState extends State<EndlessScreen> {
     );
   }
 
+  /// 前幾桌牌少時卡片最大的寬度。
+  static const maxCardWidth = 110.0;
+
+  Offset _burstCenter(_Burst burst, Offset Function(int) cardCenter, Size board) {
+    final rel = burst.relative;
+    if (rel != null) return Offset(board.width * rel.dx, board.height * rel.dy);
+    return burst.at ?? cardCenter(burst.card);
+  }
+
   Widget _buildBoard() {
     const gap = 8.0;
     final count = _game.cards.length;
     final skin = skinById(_store.equippedSkin);
     final reduceMotion = MediaQuery.of(context).disableAnimations;
     return LayoutBuilder(builder: (context, constraints) {
-      // 16 張固定 4 欄；卡片比例 3:4，取「寬度放得下」和「高度放得下」中較小的尺寸
-      const columns = 4;
+      // 欄數依第幾桌（2×2、3×2、4×2、4×4）；卡片比例 3:4，取「寬度放得下」和「高度放得下」中較小的尺寸，
+      // 前幾桌牌少，卡片不要大得太誇張
+      final columns = _game.columns;
       final rows = (count / columns).ceil();
       final byWidth = (constraints.maxWidth - gap * (columns - 1)) / columns;
       final byHeight = (constraints.maxHeight - gap * (rows - 1)) / rows * 3 / 4;
-      final cardWidth = min(byWidth, byHeight);
+      final cardWidth = min(maxCardWidth, min(byWidth, byHeight));
       final cardHeight = cardWidth * 4 / 3;
       Offset cardCenter(int i) => Offset(
             (i % columns) * (cardWidth + gap) + cardWidth / 2,
             (i ~/ columns) * (cardHeight + gap) + cardHeight / 2,
           );
+      final boardSize = Size(cardWidth * columns + gap * (columns - 1), cardHeight * rows + gap * (rows - 1));
       return Center(
-        // 每輪換新的 key，讓卡片整組重建
-        key: ObjectKey(_game),
+        // 每一輪、每一桌換新的 key，讓卡片整組重建
+        key: ValueKey('board_${identityHashCode(_game)}_${_game.table}'),
         child: SizedBox(
-          width: cardWidth * columns + gap * (columns - 1),
+          width: boardSize.width,
+          height: boardSize.height,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -699,14 +769,13 @@ class _EndlessScreenState extends State<EndlessScreen> {
                     SizedBox(
                       width: cardWidth,
                       height: cardHeight,
-                      // 補牌時換 key，整張重建並播放發牌動畫（不會播翻回背面的動畫）
                       child: Opacity(
                         key: ValueKey('slot_visible_$i'),
-                        // 正在飛起來相撞的牌，原本的格子先空著
-                        opacity: _merges.any((m) => m.a == i || m.b == i) ? 0 : 1,
+                        // 配對成功的牌消掉，位置空著（相撞動畫畫在上層）
+                        opacity: _game.isMatched[i] ? 0 : 1,
                         child: _DealIn(
-                          key: ValueKey('slot_${i}_${_dealt[i]}'),
-                          animate: _dealt[i] > 0 && !reduceMotion,
+                          // 第二桌起發牌時播放發牌動畫
+                          animate: _game.table > 1 && !reduceMotion,
                           child: DecoratedBox(
                             // 老闆提示的那一組亮金光
                             decoration: BoxDecoration(
@@ -727,7 +796,6 @@ class _EndlessScreenState extends State<EndlessScreen> {
                               isMatched: _game.isMatched[i],
                               skin: skin,
                               width: cardWidth,
-                              badge: _game.isNew(i) ? '新' : null,
                               onTap: () => _onCardTap(i),
                             ),
                           ),
@@ -738,6 +806,7 @@ class _EndlessScreenState extends State<EndlessScreen> {
               ),
               for (final m in _merges)
                 Positioned.fill(
+                  key: ObjectKey(m),
                   child: IgnorePointer(
                     child: _MergeFly(
                       key: ObjectKey(m),
@@ -752,6 +821,15 @@ class _EndlessScreenState extends State<EndlessScreen> {
                     ),
                   ),
                 ),
+              // 清桌動畫：牌桌正中央
+              if (_showClear)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: _TableClear(table: _game.table, bonus: _game.lastClearBonus),
+                    ),
+                  ),
+                ),
               // 開局提示框：牌桌正中央倒數
               if (_game.isPreviewing)
                 Positioned.fill(
@@ -761,8 +839,10 @@ class _EndlessScreenState extends State<EndlessScreen> {
                 ),
               for (final burst in _bursts)
                 Positioned(
-                  left: (burst.at ?? cardCenter(burst.card)).dx - MatchBurst.size / 2,
-                  top: (burst.at ?? cardCenter(burst.card)).dy - MatchBurst.size / 2,
+                  // key 要放在 Stack 的直接子元件上：前面的特效播完移除時，後面的才不會被當成新的重新播放
+                  key: ObjectKey(burst),
+                  left: _burstCenter(burst, cardCenter, boardSize).dx - MatchBurst.size / 2,
+                  top: _burstCenter(burst, cardCenter, boardSize).dy - MatchBurst.size / 2,
                   child: IgnorePointer(
                     child: MatchBurst(
                       key: ObjectKey(burst),
@@ -784,9 +864,9 @@ class _EndlessScreenState extends State<EndlessScreen> {
   }
 }
 
-/// 新牌發到桌上：從小變大、淡入，帶一點回彈。
+/// 新的一桌發到桌上：從小變大、淡入，帶一點回彈。
 class _DealIn extends StatelessWidget {
-  const _DealIn({super.key, required this.animate, required this.child});
+  const _DealIn({required this.animate, required this.child});
 
   final bool animate;
   final Widget child;
@@ -927,6 +1007,87 @@ class _MergeFlyState extends State<_MergeFly> with SingleTickerProviderStateMixi
         );
       },
       child: card,
+    );
+  }
+}
+
+/// 清桌動畫：「清桌！」彈出來、大分數、加秒數，最後淡出。
+class _TableClear extends StatelessWidget {
+  const _TableClear({required this.table, required this.bonus});
+
+  final int table;
+  final int bonus;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    return TweenAnimationBuilder<double>(
+      key: const ValueKey('table_clear'),
+      tween: Tween(begin: reduceMotion ? 0.5 : 0, end: 1),
+      duration: _EndlessScreenState.clearCelebration,
+      builder: (context, t, _) {
+        double phase(double a, double b, [Curve c = Curves.linear]) => c.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
+        final pop = phase(0, 0.3, Curves.elasticOut); // 「清桌！」彈出
+        final score = phase(0.15, 0.45, Curves.easeOutBack); // 分數晚一點跳出來
+        final fade = phase(0.85, 1); // 最後淡出
+        return Opacity(
+          opacity: 1 - fade,
+          // 小螢幕的牌桌比較矮時整塊縮小
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform.scale(
+                  scale: 0.3 + 0.7 * pop,
+                  child: Text(
+                    '清桌！',
+                    style: TextStyle(
+                      color: NightColors.glow,
+                      fontSize: 52,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 6,
+                      shadows: [
+                        Shadow(color: NightColors.glow.withValues(alpha: 0.9), blurRadius: 24),
+                        Shadow(color: NightColors.lantern.withValues(alpha: 0.8), blurRadius: 40),
+                      ],
+                    ),
+                  ),
+                ),
+                Opacity(
+                  opacity: score.clamp(0.0, 1.0),
+                  child: Transform.scale(
+                    scale: 0.5 + 0.5 * score,
+                    child: Column(
+                      children: [
+                        Text(
+                          '+$bonus',
+                          key: const ValueKey('table_clear_bonus'),
+                          style: const TextStyle(
+                            color: NightColors.paper,
+                            fontSize: 44,
+                            fontWeight: FontWeight.w900,
+                            shadows: [Shadow(color: Colors.black87, blurRadius: 10)],
+                          ),
+                        ),
+                        Text(
+                          '第 $table 桌・時間 +${EndlessGame.clearBonusSeconds} 秒',
+                          style: const TextStyle(
+                            color: NightColors.paper,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            shadows: [Shadow(color: Colors.black87, blurRadius: 8)],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

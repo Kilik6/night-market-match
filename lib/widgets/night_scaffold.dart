@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'coin.dart';
 
 /// 所有畫面共用的夜空背景：深色底加上方暖色燈光暈染。
 class NightScaffold extends StatelessWidget {
@@ -112,7 +113,7 @@ class CoinBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
+    return CoinText(
       '🪙 $coins',
       key: const ValueKey('coins'),
       style: const TextStyle(color: NightColors.glow, fontSize: 18, fontWeight: FontWeight.w700),

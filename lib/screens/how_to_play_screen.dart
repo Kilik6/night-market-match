@@ -5,6 +5,7 @@ import '../game/items.dart';
 import '../game/matching_game.dart';
 import '../game/night_market_data.dart';
 import '../theme.dart';
+import '../widgets/coin.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/night_scaffold.dart';
 
@@ -49,12 +50,12 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🔥',
             title: '夜市大胃王',
             lines: [
-              '配對成功的牌會被吃掉、補上新牌，一直吃到時間用完，挑戰最高分。',
+              '一桌一桌吃：配對成功的牌會被吃掉，整桌清空就發下一桌，一直吃到時間用完，挑戰最高分。',
+              '牌越來越多：第 1～2 桌 4 張、第 3～5 桌 6 張、第 6～9 桌 8 張，第 10 桌起 16 張。每一桌開始都會先翻開讓你記。',
+              '清桌獎勵：${EndlessGame.clearBonusPerTable} × 第幾桌的分數，時間再 +${EndlessGame.clearBonusSeconds} 秒。',
               '從 ${EndlessGame.startSeconds} 秒開始，每配對一組加時間：'
                   '前 20 組 +${EndlessGame.timeGainFor(0)} 秒、到第 50 組 +${EndlessGame.timeGainFor(20)} 秒，'
                   '之後 +${EndlessGame.timeGainFor(50)} 秒。翻錯不扣時間。',
-              '越吃越多種小吃上桌，要記的牌也越來越多。同一次補上的新牌一定不是一對。',
-              '還沒翻過的新牌，卡背右上角會標「新」，記不住的時候先從新牌翻起。',
               '連續翻錯 ${EndlessGame.bossHintAfterMisses} 次，老闆會偷偷亮出一組對子；提示過後要再配對 ${EndlessGame.bossHintCooldownMatches} 組才會再提示。',
               '金幣是分數 ÷ ${EndlessGame.scorePerCoin}。',
             ],
@@ -135,7 +136,7 @@ class _Section extends StatelessWidget {
                 children: [
                   const Text('・', style: TextStyle(color: NightColors.mist, fontSize: 14, height: 1.5)),
                   Expanded(
-                    child: Text(line, style: const TextStyle(color: NightColors.paper, fontSize: 14, height: 1.5)),
+                    child: CoinText(line, style: const TextStyle(color: NightColors.paper, fontSize: 14, height: 1.5)),
                   ),
                 ],
               ),

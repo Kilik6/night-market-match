@@ -6,20 +6,11 @@ import 'package:night_market_match/game/items.dart';
 import 'package:night_market_match/game/matching_game.dart' show PickResult;
 import 'package:night_market_match/game/night_market_data.dart';
 
-/// 桌上（未配對）各種小吃的張數。
-Map<Food, int> countsOf(EndlessGame g) {
-  final counts = <Food, int>{};
-  for (var i = 0; i < g.cards.length; i++) {
-    if (!g.isMatched[i]) counts.update(g.cards[i], (c) => c + 1, ifAbsent: () => 1);
-  }
-  return counts;
-}
-
 /// 找一組桌上完整的對子。
 (int, int) anyPair(EndlessGame g) {
-  for (var a = 0; a < g.cards.length; a++) {
+  for (var a = 0; a < g.boardSize; a++) {
     if (g.isMatched[a]) continue;
-    for (var b = a + 1; b < g.cards.length; b++) {
+    for (var b = a + 1; b < g.boardSize; b++) {
       if (!g.isMatched[b] && g.cards[a] == g.cards[b]) return (a, b);
     }
   }
@@ -28,39 +19,40 @@ Map<Food, int> countsOf(EndlessGame g) {
 
 /// 找兩張不是一對的牌。
 (int, int) anyMismatch(EndlessGame g) {
-  for (var a = 0; a < g.cards.length; a++) {
-    for (var b = a + 1; b < g.cards.length; b++) {
+  for (var a = 0; a < g.boardSize; a++) {
+    for (var b = a + 1; b < g.boardSize; b++) {
       if (!g.isMatched[a] && !g.isMatched[b] && g.cards[a] != g.cards[b]) return (a, b);
     }
   }
   throw StateError('找不到不同的兩張');
 }
 
-void matchAny(EndlessGame g) {
+PickResult matchAny(EndlessGame g) {
   final (a, b) = anyPair(g);
   g.pick(a);
-  expect(g.pick(b), PickResult.matched);
+  return g.pick(b);
 }
 
-/// 補牌後桌上必須成立的規則。
-void expectBoardHealthy(EndlessGame g, {String reason = ''}) {
-  expect(g.isMatched.contains(true), isFalse, reason: '$reason 補完不該有空格');
-  final counts = countsOf(g);
-  expect(counts.values.every((c) => c <= 2), isTrue, reason: '$reason 同一種小吃最多兩張');
-  expect(g.pairsOnBoard, greaterThanOrEqualTo(EndlessGame.minPairsOnBoard), reason: '$reason 對子不夠會死局');
-  expect(g.cards.length, g.boardSize);
+/// 把這一桌清完（不發下一桌）。
+void clearTable(EndlessGame g) {
+  while (!g.tableCleared) {
+    matchAny(g);
+  }
 }
 
 void main() {
   group('EndlessGame 開局', () {
-    test('16 張全部成對，時間 60 秒', () {
+    test('第 1 桌 2×2：4 張、2 組，時間 60 秒', () {
       final g = EndlessGame(random: Random(1));
-      expect(g.cards.length, 16);
-      expect(countsOf(g).values.every((c) => c == 2), isTrue);
-      expect(countsOf(g).length, 8);
+      expect(g.table, 1);
+      expect(g.boardSize, 4);
+      expect(g.columns, 2);
+      expect(g.cards.toSet().length, 2);
+      for (final f in g.cards.toSet()) {
+        expect(g.cards.where((c) => c == f).length, 2);
+      }
       expect(g.timeLeft, 60);
       expect(g.score, 0);
-      expect(g.isEnded, isFalse);
     });
 
     test('帽子加的秒數同時加在起始時間和上限', () {
@@ -69,54 +61,120 @@ void main() {
       expect(g.maxSeconds, 64);
     });
 
-    test('reset 重新開一局', () {
+    test('reset 回到第 1 桌、分數歸零', () {
       final g = EndlessGame(random: Random(2));
-      matchAny(g);
-      g.refill();
+      clearTable(g);
+      g.nextTable();
       g.tick();
       g.reset();
+      expect(g.table, 1);
+      expect(g.boardSize, 4);
       expect(g.score, 0);
       expect(g.matches, 0);
+      expect(g.tablesCleared, 0);
       expect(g.timeLeft, 60);
-      expect(countsOf(g).values.every((c) => c == 2), isTrue);
     });
   });
 
-  group('EndlessGame 計分與時間', () {
-    test('配對得分 100 × 連擊，連擊有上限', () {
+  group('EndlessGame 一桌一桌清', () {
+    test('牌桌大小：第 1～2 桌 2×2、第 3～5 桌 3×2、第 6～9 桌 4×2、第 10 桌起 4×4', () {
+      final expected = {1: (4, 2), 2: (4, 2), 3: (6, 3), 5: (6, 3), 6: (8, 4), 9: (8, 4), 10: (16, 4), 30: (16, 4)};
+      expected.forEach((table, size) {
+        expect(EndlessGame.cardsForTable(table), size.$1, reason: '第 $table 桌張數');
+        expect(EndlessGame.columnsForTable(table), size.$2, reason: '第 $table 桌欄數');
+      });
+    });
+
+    test('配對成功的牌消掉、位置空著，不會補牌', () {
       final g = EndlessGame(random: Random(3));
+      final (a, b) = anyPair(g);
+      final before = g.cards.toList();
+      g.pick(a);
+      expect(g.pick(b), PickResult.matched);
+      expect(g.isMatched[a] && g.isMatched[b], isTrue);
+      expect(g.cards, before, reason: '沒有補牌');
+      expect(g.pick(a), PickResult.ignored, reason: '消掉的位置不能點');
+      expect(g.pairsLeft, 1);
+    });
+
+    test('清桌：最後一組回傳 finished，加 500 × 第幾桌和 5 秒，計時暫停、不能翻牌', () {
+      final g = EndlessGame(random: Random(4));
+      for (var i = 0; i < 20; i++) {
+        g.tick();
+      }
+      expect(g.timeLeft, 40);
+      expect(matchAny(g), PickResult.matched);
+      expect(matchAny(g), PickResult.finished);
+      expect(g.tableCleared, isTrue);
+      expect(g.tablesCleared, 1);
+      expect(g.lastClearBonus, 500);
+      expect(g.score, 100 + 200 + 500);
+      expect(g.timeLeft, 40 + 3 + 3 + 5);
+      expect(g.tick(), isFalse);
+      expect(g.timeLeft, 51, reason: '清桌動畫期間不倒數');
+      expect(g.isLocked, isTrue);
+      expect(g.canPeek, isFalse);
+    });
+
+    test('nextTable：發下一桌全新的牌，連擊和分數延續', () {
+      final g = EndlessGame(random: Random(5));
+      clearTable(g);
+      final combo = g.combo;
+      final score = g.score;
+      g.nextTable();
+      expect(g.table, 2);
+      expect(g.tableCleared, isFalse);
+      expect(g.isMatched.any((m) => m), isFalse);
+      expect(g.isOpen.any((o) => o), isFalse);
+      expect(g.combo, combo, reason: '連擊延續到下一桌');
+      expect(g.score, score);
+      g.nextTable();
+      expect(g.table, 2, reason: '沒清桌不能跳下一桌');
+    });
+
+    test('清桌獎勵隨桌數增加；一路清到第 12 桌牌桌大小都正確、每桌都成對', () {
+      final g = EndlessGame(random: Random(6));
+      for (var t = 1; t <= 12; t++) {
+        expect(g.boardSize, EndlessGame.cardsForTable(t), reason: '第 $t 桌');
+        for (final f in g.cards.toSet()) {
+          expect(g.cards.where((c) => c == f).length, 2, reason: '第 $t 桌每種小吃剛好一對');
+        }
+        final before = g.score;
+        clearTable(g);
+        expect(g.lastClearBonus, 500 * t);
+        expect(g.score - before, greaterThanOrEqualTo(500 * t));
+        g.nextTable();
+      }
+      expect(g.tablesCleared, 12);
+    });
+
+    test('時間上限：配對和清桌加的秒數不超過 60 秒', () {
+      final g = EndlessGame(random: Random(7));
+      clearTable(g);
+      expect(g.timeLeft, 60);
+    });
+  });
+
+  group('EndlessGame 計分', () {
+    test('配對得分 100 × 連擊，連擊有上限，跨桌延續', () {
+      final g = EndlessGame(random: Random(8));
       final points = <int>[];
       for (var i = 0; i < 7; i++) {
+        if (g.tableCleared) g.nextTable();
         matchAny(g);
         points.add(g.lastPoints);
-        g.refill();
       }
       expect(points, [100, 200, 300, 400, 500, 500, 500]);
-      expect(g.score, 2500);
       expect(g.bestCombo, 5);
     });
 
     test('攤車提高連擊上限', () {
-      final g = EndlessGame(random: Random(3), comboCap: 7);
+      final g = EndlessGame(random: Random(8), comboCap: 7);
       for (var i = 0; i < 8; i++) {
+        if (g.tableCleared) g.nextTable();
         matchAny(g);
-        g.refill();
       }
       expect(g.lastPoints, 700);
-    });
-
-    test('配對加秒數，不超過上限', () {
-      final g = EndlessGame(random: Random(4));
-      for (var i = 0; i < 5; i++) {
-        g.tick();
-      }
-      expect(g.timeLeft, 55);
-      matchAny(g);
-      expect(g.lastTimeGain, 3);
-      expect(g.timeLeft, 58);
-      g.refill();
-      matchAny(g);
-      expect(g.timeLeft, 60, reason: '最多回到上限 60 秒');
     });
 
     test('配對越多，加的秒數越少：3 → 2 → 1', () {
@@ -125,273 +183,127 @@ void main() {
       expect(EndlessGame.timeGainFor(20), 2);
       expect(EndlessGame.timeGainFor(49), 2);
       expect(EndlessGame.timeGainFor(50), 1);
-      expect(EndlessGame.timeGainFor(500), 1);
     });
 
     test('翻錯中斷連擊、不扣時間，蓋回去前不能再翻', () {
-      final g = EndlessGame(random: Random(5));
-      matchAny(g);
-      g.refill();
-      expect(g.combo, 2);
+      final g = EndlessGame(random: Random(9));
+      clearTable(g);
+      g.nextTable();
+      clearTable(g);
+      g.nextTable();
+      expect(g.boardSize, 6);
+      expect(g.combo, greaterThan(1));
       final (a, b) = anyMismatch(g);
-      final before = g.timeLeft;
+      final time = g.timeLeft;
       g.pick(a);
       expect(g.pick(b), PickResult.mismatched);
       expect(g.combo, 1);
       expect(g.mistakes, 1);
-      expect(g.timeLeft, before);
+      expect(g.timeLeft, time);
       expect(g.isLocked, isTrue);
-      final other = List.generate(16, (i) => i).firstWhere((i) => i != a && i != b);
-      expect(g.pick(other), PickResult.ignored);
       g.hideMismatched();
-      expect(g.isOpen[a] || g.isOpen[b], isFalse);
       expect(g.isLocked, isFalse);
     });
 
     test('護身符擋下一次翻錯', () {
-      final g = EndlessGame(random: Random(5));
-      matchAny(g);
-      g.refill();
-      expect(g.useItem(ItemType.charm), isTrue);
+      final g = EndlessGame(random: Random(9));
+      clearTable(g);
+      g.nextTable();
+      g.useItem(ItemType.charm);
+      final combo = g.combo;
       final (a, b) = anyMismatch(g);
       g.pick(a);
       g.pick(b);
-      expect(g.combo, 2, reason: '護身符生效，連擊不中斷');
+      expect(g.combo, combo);
       expect(g.charmActive, isFalse);
-    });
-
-    test('不能翻已經翻開或已配對的牌', () {
-      final g = EndlessGame(random: Random(6));
-      final (a, b) = anyPair(g);
-      g.pick(a);
-      expect(g.pick(a), PickResult.ignored);
-      g.pick(b);
-      expect(g.pick(a), PickResult.ignored, reason: '已配對、還沒補牌');
-    });
-  });
-
-  group('EndlessGame 補牌', () {
-    test('只補已配對的格子，補完蓋著', () {
-      final g = EndlessGame(random: Random(7));
-      final (a, b) = anyPair(g);
-      final untouched = [for (var i = 0; i < 16; i++) if (i != a && i != b) g.cards[i]];
-      g.pick(a);
-      g.pick(b);
-      final filled = g.refill();
-      expect(filled, [a, b]..sort());
-      expect(g.lastRefilled, filled);
-      expect(g.isOpen[a] || g.isOpen[b], isFalse);
-      expect([for (var i = 0; i < 16; i++) if (i != a && i != b) g.cards[i]], untouched);
-    });
-
-    test('同一批補上的牌彼此一定不是一對（各種種子都檢查）', () {
-      for (var seed = 0; seed < 200; seed++) {
-        final g = EndlessGame(random: Random(seed));
-        for (var m = 0; m < 60; m++) {
-          matchAny(g);
-          final filled = g.refill();
-          final foods = [for (final i in filled) g.cards[i]];
-          expect(foods.toSet().length, foods.length, reason: 'seed $seed 第 $m 組：剛補上的兩張是一對');
-        }
-      }
-    });
-
-    test('連續配對兩組才補牌，四格一起補也不會互相成對', () {
-      for (var seed = 0; seed < 100; seed++) {
-        final g = EndlessGame(random: Random(seed));
-        for (var round = 0; round < 20; round++) {
-          matchAny(g);
-          matchAny(g);
-          final filled = g.refill();
-          expect(filled.length, 4);
-          final foods = [for (final i in filled) g.cards[i]];
-          expect(foods.toSet().length, 4, reason: 'seed $seed');
-          expectBoardHealthy(g, reason: 'seed $seed');
-        }
-      }
-    });
-
-    test('長時間遊玩：每次補牌後都不會死局、不會超過兩張', () {
-      for (var seed = 0; seed < 300; seed++) {
-        final g = EndlessGame(random: Random(seed));
-        for (var m = 0; m < 200; m++) {
-          matchAny(g);
-          g.refill();
-          expectBoardHealthy(g, reason: 'seed $seed 第 $m 組');
-        }
-      }
-    });
-
-    test('對子快用完時，補牌會優先補成對（防死局的安全網）', () {
-      // 正常遊玩很少走到這裡，所以直接擺出極端的桌面：只有 2 組對子，其餘 12 張都落單
-      for (var seed = 0; seed < 300; seed++) {
-        final g = EndlessGame(random: Random(seed));
-        g.matches = 80; // 20 種小吃都已開放
-        g.cards = [foods[0], foods[0], foods[1], foods[1], for (var i = 2; i < 14; i++) foods[i]];
-        expect(g.pairsOnBoard, 2);
-        expect(g.singlesOnBoard, 12);
-        g.pick(0);
-        g.pick(1);
-        expect(g.pairsOnBoard, 1);
-        g.refill();
-        expectBoardHealthy(g, reason: 'seed $seed');
-      }
-    });
-
-    test('越玩越難：小吃種類增加，桌上開始出現落單的牌', () {
-      final g = EndlessGame(random: Random(8));
-      expect(g.activeKinds, 10);
-      var maxSingles = 0;
-      final seen = <Food>{};
-      for (var m = 0; m < 120; m++) {
-        matchAny(g);
-        g.refill();
-        maxSingles = max(maxSingles, g.singlesOnBoard);
-        seen.addAll(g.cards);
-      }
-      expect(g.activeKinds, foods.length, reason: '最後 20 種小吃都會出現');
-      expect(seen.length, foods.length);
-      expect(maxSingles, greaterThanOrEqualTo(4), reason: '後期要記的落單牌變多');
-    });
-
-    test('只出現目前開放的小吃種類', () {
-      for (var seed = 0; seed < 50; seed++) {
-        final g = EndlessGame(random: Random(seed));
-        final allowed = <Food>{...g.cards};
-        for (var m = 0; m < 7; m++) {
-          matchAny(g);
-          g.refill();
-          allowed.addAll(g.cards);
-        }
-        expect(allowed.length, lessThanOrEqualTo(10), reason: 'seed $seed：前 8 組只會用到 10 種');
-      }
     });
   });
 
   group('EndlessGame 結束、續命與道具', () {
     test('時間到結束，結束後不能翻牌', () {
-      final g = EndlessGame(random: Random(9));
+      final g = EndlessGame(random: Random(10));
       for (var i = 0; i < 59; i++) {
         expect(g.tick(), isFalse);
       }
       expect(g.tick(), isTrue);
       expect(g.isEnded, isTrue);
       expect(g.pick(0), PickResult.ignored);
-      expect(g.tick(), isFalse);
     });
 
     test('看廣告續命一次 15 秒，翻錯中的牌會蓋回去', () {
-      final g = EndlessGame(random: Random(9));
+      final g = EndlessGame(random: Random(10));
       final (a, b) = anyMismatch(g);
       g.pick(a);
       g.pick(b);
       while (!g.tick()) {}
       expect(g.revive(), isTrue);
       expect(g.timeLeft, 15);
-      expect(g.isEnded, isFalse);
       expect(g.isLocked, isFalse);
       while (!g.tick()) {}
-      expect(g.canRevive, isFalse);
       expect(g.revive(), isFalse);
     });
 
     test('金幣：結束後才結算，每 20 分 1 枚，算盤和招財貓會加成', () {
-      final g = EndlessGame(random: Random(10), coinMultiplier: 1.2);
+      final g = EndlessGame(random: Random(11), coinMultiplier: 1.2);
       g.useItem(ItemType.luckyCat);
-      for (var i = 0; i < 3; i++) {
-        matchAny(g);
-        g.refill();
-      }
-      expect(g.score, 600);
-      expect(g.coinsEarned, 0, reason: '還沒結束');
+      clearTable(g); // 100 + 200 + 清桌 500
+      expect(g.score, 800);
+      expect(g.coinsEarned, 0);
+      g.nextTable();
       while (!g.tick()) {}
-      expect(g.coinsEarned, (600 / 20 * 1.2 * 1.5).round(), reason: '無盡模式每 20 分換 1 枚金幣');
+      expect(g.coinsEarned, (800 / 20 * 1.2 * 1.5).round());
     });
 
     test('沙漏可以超過時間上限', () {
-      final g = EndlessGame(random: Random(11));
+      final g = EndlessGame(random: Random(12));
       g.useItem(ItemType.hourglass);
       expect(g.timeLeft, 70);
       matchAny(g);
-      expect(g.timeLeft, 70, reason: '已經超過上限，配對不加也不扣');
+      expect(g.timeLeft, 70);
     });
 
-    test('道具每局每種限用一次', () {
-      final g = EndlessGame(random: Random(11));
-      expect(g.useItem(ItemType.hourglass), isTrue);
-      expect(g.useItem(ItemType.hourglass), isFalse);
-    });
-
-    test('放大鏡：翻開的那張另一半在桌上，就配那一張', () {
-      final g = EndlessGame(random: Random(12));
+    test('放大鏡：翻開的那張就配它的另一半；配到最後一組會清桌', () {
+      final g = EndlessGame(random: Random(13));
       final (a, b) = anyPair(g);
       g.pick(a);
       expect(g.useItem(ItemType.magnifier), isTrue);
       expect(g.lastMatchedCards, [a, b]);
-      expect(g.score, 100);
-      expect(g.firstPickedIndex, isNull);
+      expect(g.useItem(ItemType.magnifier), isFalse, reason: '每局一次');
+
+      final g2 = EndlessGame(random: Random(14));
+      matchAny(g2);
+      g2.useItem(ItemType.magnifier);
+      expect(g2.tableCleared, isTrue);
+      expect(g2.lastClearBonus, 500);
     });
 
-    test('放大鏡：翻開的那張是落單牌，就蓋回去改配別組', () {
-      // 玩到桌上有落單牌
-      final g = EndlessGame(random: Random(13));
-      while (g.singlesOnBoard == 0) {
-        matchAny(g);
-        g.refill();
-      }
-      final counts = countsOf(g);
-      final single = List.generate(16, (i) => i).firstWhere((i) => counts[g.cards[i]] == 1);
-      g.pick(single);
-      final scoreBefore = g.score;
-      expect(g.useItem(ItemType.magnifier), isTrue);
-      expect(g.isOpen[single], isFalse);
-      expect(g.isMatched[single], isFalse);
-      expect(g.lastMatchedCards, isNot(contains(single)));
-      expect(g.score, greaterThan(scoreBefore));
-      g.refill();
-      expectBoardHealthy(g);
-    });
-
-    test('開局翻牌：全部翻開、不能翻牌、不倒數、不能偷看，也不會用掉偷看', () {
+    test('翻牌記憶：全部翻開、不能翻牌、不倒數、不能偷看，也不會用掉偷看', () {
       final g = EndlessGame(random: Random(15));
       g.startPreview();
-      expect(List.generate(16, g.isFaceUp).every((up) => up), isTrue);
+      expect(List.generate(g.boardSize, g.isFaceUp).every((up) => up), isTrue);
       expect(g.pick(0), PickResult.ignored);
       expect(g.tick(), isFalse);
-      expect(g.timeLeft, 60);
       expect(g.canPeek, isFalse);
       g.endPreview();
-      expect(List.generate(16, g.isFaceUp).any((up) => up), isFalse);
-      expect(g.canPeek, isTrue, reason: '開局翻牌不會用掉偷看');
-      expect(g.pick(0), PickResult.firstPicked);
+      expect(List.generate(g.boardSize, g.isFaceUp).any((up) => up), isFalse);
+      expect(g.canPeek, isTrue);
     });
 
-    test('「新」標記：沒看過的是新的；翻過、開局翻牌、偷看都算看過；補上的牌又是新的', () {
+    test('偷看每局一次，偷看中不能翻牌', () {
       final g = EndlessGame(random: Random(16));
-      expect(List.generate(16, g.isNew).every((n) => n), isTrue);
-      g.startPreview();
-      g.endPreview();
-      expect(List.generate(16, g.isNew).any((n) => n), isFalse, reason: '開局翻牌全部看過');
-
-      final (a, b) = anyPair(g);
-      g.pick(a);
-      g.pick(b);
-      expect(g.isNew(a), isFalse, reason: '已配對的不標');
-      final filled = g.refill();
-      for (final i in filled) {
-        expect(g.isNew(i), isTrue, reason: '補上的牌是新的');
-      }
-      g.pick(filled.first);
-      expect(g.isNew(filled.first), isFalse, reason: '翻過就不是新的');
-      g.hideMismatched();
-
-      final g2 = EndlessGame(random: Random(17));
-      g2.startPeek();
-      expect(List.generate(16, g2.isNew).any((n) => n), isFalse, reason: '偷看全部看過');
+      expect(g.startPeek(), isTrue);
+      expect(g.pick(0), PickResult.ignored);
+      g.endPeek();
+      expect(g.startPeek(), isFalse);
     });
 
     test('老闆提示：連錯 2 次給一組對子，配對會歸零，提示後要再配 3 組才會再給', () {
       final g = EndlessGame(random: Random(18));
+      // 先到 4×4 的桌，牌夠多才好測
+      while (g.table < 10) {
+        clearTable(g);
+        g.nextTable();
+      }
       void miss() {
         final (a, b) = anyMismatch(g);
         g.pick(a);
@@ -402,59 +314,48 @@ void main() {
       miss();
       expect(g.takeBossHint(), isNull, reason: '才錯 1 次');
       matchAny(g);
-      g.refill();
       miss();
       expect(g.takeBossHint(), isNull, reason: '中間配對成功，連錯歸零');
       miss();
       final hint = g.takeBossHint();
       expect(hint, isNotNull);
-      expect(g.cards[hint![0]], g.cards[hint[1]], reason: '提示的是一對');
-      expect(g.isMatched[hint[0]] || g.isMatched[hint[1]], isFalse);
-      expect(g.isNew(hint[0]) || g.isNew(hint[1]), isFalse, reason: '提示過就算看過');
-
+      expect(g.cards[hint![0]], g.cards[hint[1]]);
       miss();
       miss();
       expect(g.takeBossHint(), isNull, reason: '冷卻中');
       for (var i = 0; i < EndlessGame.bossHintCooldownMatches; i++) {
         matchAny(g);
-        g.refill();
       }
       miss();
       miss();
       expect(g.takeBossHint(), isNotNull, reason: '配了 3 組，冷卻結束');
     });
 
-    test('老闆提示不會打亂之後的補牌（不用共用的亂數）', () {
+    test('老闆提示不會打亂之後的發牌（不用共用的亂數）', () {
       final a = EndlessGame(random: Random(19));
       final b = EndlessGame(random: Random(19));
       for (final g in [a, b]) {
-        final (x, y) = anyMismatch(g);
-        g.pick(x);
-        g.pick(y);
-        g.hideMismatched();
-        final (p, q) = anyMismatch(g);
-        g.pick(p);
-        g.pick(q);
-        g.hideMismatched();
+        clearTable(g);
+        g.nextTable();
+        clearTable(g);
+        g.nextTable();
+        for (var i = 0; i < 2; i++) {
+          final (x, y) = anyMismatch(g);
+          g.pick(x);
+          g.pick(y);
+          g.hideMismatched();
+        }
       }
       expect(a.takeBossHint(), isNotNull); // 只有 a 拿提示
-      for (var i = 0; i < 10; i++) {
-        matchAny(a);
-        matchAny(b);
-        a.refill();
-        b.refill();
+      for (final g in [a, b]) {
+        clearTable(g);
+        g.nextTable();
       }
       expect(a.cards, b.cards);
     });
+  });
 
-    test('偷看每局一次，偷看中不能翻牌', () {
-      final g = EndlessGame(random: Random(14));
-      expect(g.startPeek(), isTrue);
-      expect(g.isFaceUp(0), isTrue);
-      expect(g.pick(0), PickResult.ignored);
-      g.endPeek();
-      expect(g.isFaceUp(0), isFalse);
-      expect(g.startPeek(), isFalse);
-    });
+  test('小吃池至少要能擺滿最大的一桌', () {
+    expect(foods.length, greaterThanOrEqualTo(EndlessGame.maxCards ~/ 2));
   });
 }

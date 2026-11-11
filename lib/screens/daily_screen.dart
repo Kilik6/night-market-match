@@ -4,6 +4,7 @@ import '../game/achievements.dart';
 import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
+import '../widgets/coin.dart';
 import '../widgets/night_scaffold.dart';
 
 /// 每日任務與連續簽到。
@@ -23,7 +24,7 @@ class _DailyScreenState extends State<DailyScreen> {
   void _toast(String text) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text), duration: const Duration(seconds: 2)));
+      ..showSnackBar(SnackBar(content: CoinText(text), duration: const Duration(seconds: 2)));
   }
 
   Future<void> _checkIn() async {
@@ -71,7 +72,7 @@ class _DailyScreenState extends State<DailyScreen> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text(
+            child: CoinText(
               canCheckIn ? '簽到領 🪙 ${checkInRewards[day - 1]}' : '今天已經簽到了',
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
@@ -128,7 +129,7 @@ class _DailyScreenState extends State<DailyScreen> {
               children: [
                 Text(task.description, style: const TextStyle(color: NightColors.paper, fontSize: 16, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text(
+                CoinText(
                   '$progress / ${task.target}・獎勵 🪙 ${task.coins}',
                   style: const TextStyle(color: NightColors.mist, fontSize: 13),
                 ),

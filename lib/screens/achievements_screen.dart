@@ -5,6 +5,7 @@ import '../game/card_skins.dart';
 import '../services/progress_store.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
+import '../widgets/coin.dart';
 import '../widgets/night_scaffold.dart';
 
 /// 成就：顯示進度，達成後領獎。
@@ -28,7 +29,7 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     final reward = a.skinId != null ? '卡背「${skinById(a.skinId!).name}」' : '🪙 ${a.coins}';
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('獲得 $reward'), duration: const Duration(seconds: 2)));
+      ..showSnackBar(SnackBar(content: CoinText('獲得 $reward'), duration: const Duration(seconds: 2)));
   }
 
   @override
@@ -66,7 +67,7 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                       const SizedBox(height: 2),
                       Text(a.description, style: const TextStyle(color: NightColors.mist, fontSize: 13)),
                       const SizedBox(height: 2),
-                      Text(
+                      CoinText(
                         '$progress / ${a.target}・獎勵：$reward',
                         style: const TextStyle(color: NightColors.mist, fontSize: 12),
                       ),

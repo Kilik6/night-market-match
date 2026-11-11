@@ -17,10 +17,15 @@ import 'package:night_market_match/screens/splash_screen.dart';
 import 'package:night_market_match/services/ad_service.dart';
 import 'package:night_market_match/services/progress_store.dart';
 import 'package:night_market_match/services/sound_service.dart';
+import 'package:night_market_match/theme.dart';
 import 'package:night_market_match/widgets/card_widget.dart';
+import 'package:night_market_match/widgets/coin.dart';
 import 'package:night_market_match/widgets/game_widgets.dart';
 import 'package:night_market_match/widgets/match_effects.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 找含有金幣圖示的文字（畫面上 🪙 會換成金幣圖示，所以用原本的文字比對）。
+Finder findCoinText(String text) => find.byWidgetPredicate((w) => w is CoinText && w.text == text);
 
 /// 假的廣告服務：記錄被呼叫幾次，並可決定獎勵型廣告是否成功。
 class FakeAdService implements AdService {
@@ -668,7 +673,7 @@ void main() {
       await tester.tap(find.text('前往下一攤：城隍廟夜市'));
       await settle(tester);
       expect(find.text('城隍廟夜市'), findsOneWidget);
-      expect(find.text('🪙 260'), findsOneWidget); // (2000 + 60 秒 × 10) / 10
+      expect(findCoinText('🪙 260'), findsOneWidget); // (2000 + 60 秒 × 10) / 10
       expect(find.text('夜'), findsNWidgets(16));
       expect(store.coins, 260);
       expect(store.unlocked, 2);
@@ -684,7 +689,7 @@ void main() {
       await settle(tester);
       expect(ads.rewardedShown, 1);
       expect(store.coins, 520);
-      expect(find.text('🪙 520'), findsOneWidget);
+      expect(findCoinText('🪙 520'), findsOneWidget);
     });
 
     testWidgets('第 3 次過關播插頁式廣告；看過獎勵型廣告的那次不播', (tester) async {
@@ -725,6 +730,16 @@ void main() {
       await tester.pump(const Duration(seconds: 60));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('時間到了'), findsOneWidget);
+      // 廣告是亮黃色實心按鈕，其他兩個是黃色外框
+      expect(find.ancestor(of: find.text('看廣告 +15 秒繼續'), matching: find.byType(FilledButton)), findsOneWidget);
+      for (final label in ['重新開始這一攤', '回到夜市列表']) {
+        final button = find.ancestor(of: find.text(label), matching: find.byType(OutlinedButton));
+        expect(button, findsOneWidget, reason: label);
+        final side = tester.widget<OutlinedButton>(button).style!.side!.resolve({})!;
+        expect(side.color, NightColors.glow, reason: '$label 黃色外框');
+      }
+      final adTop = tester.getTopLeft(find.byKey(const ValueKey('dialog_ad'))).dy;
+      expect(adTop, lessThan(tester.getTopLeft(find.text('重新開始這一攤')).dy), reason: '廣告排第一個');
 
       ads.rewardSucceeds = false;
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
@@ -745,6 +760,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('時間到了'), findsOneWidget);
       expect(find.byKey(const ValueKey('dialog_ad')), findsNothing); // 每局只能一次
+      expect(find.ancestor(of: find.text('重新開始這一攤'), matching: find.byType(FilledButton)), findsOneWidget,
+          reason: '沒有廣告選項時，重新開始恢復成黃色實心');
       await tester.tap(find.text('重新開始這一攤'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 3)); // 讓提示訊息計時結束
@@ -821,7 +838,7 @@ void main() {
       expect(find.text('62'), findsOneWidget);
       await solveOnScreen(tester, 0);
       // (2000 + 62 秒 × 10) / 10 × 1.1 = 288
-      expect(find.text('總分 2620，獲得 🪙 288'), findsOneWidget);
+      expect(findCoinText('總分 2620，獲得 🪙 288'), findsOneWidget);
     });
 
     testWidgets('過關時顯示新達成的成就，零失誤和圖鑑都有紀錄', (tester) async {
@@ -860,6 +877,26 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 1100));
       await tester.pump();
+      expect(find.byType(MatchBurst), findsNothing);
+    });
+
+    testWidgets('連續配對時，每組特效都會按時放完，不會因為前面的放完而重播', (tester) async {
+      await pumpGame(tester);
+      final g = mirror(0);
+      for (var n = 0; n < 3; n++) {
+        final i = List.generate(g.cards.length, (k) => k).firstWhere((k) => !g.isMatched[k]);
+        final j = pairOf(g, i);
+        g.pick(i);
+        g.pick(j);
+        await tester.tap(find.byKey(ValueKey('card_$i')));
+        await tester.tap(find.byKey(ValueKey('card_$j')));
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(find.byType(MatchBurst), findsWidgets);
+      // 每 0.1 秒畫一次，最後一組的特效 1 秒後就該放完
+      for (var t = 0; t < 12; t++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       expect(find.byType(MatchBurst), findsNothing);
     });
 
@@ -905,7 +942,11 @@ void main() {
       expect(find.text('夜市翻牌'), findsOneWidget);
       expect(find.text('第 2 攤・城隍廟夜市'), findsOneWidget);
       expect(find.text('★ 3 / 54'), findsOneWidget);
-      expect(find.text('🪙 123'), findsOneWidget);
+      expect(findCoinText('🪙 123'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('coins')), matching: find.byType(CoinIcon)), findsOneWidget,
+          reason: '金幣數用畫出來的金幣圖示');
+      final rich = tester.widget<RichText>(find.descendant(of: find.byKey(const ValueKey('coins')), matching: find.byType(RichText)));
+      expect(rich.text.toPlainText(), isNot(contains('🪙')), reason: '不再顯示 🪙 表情符號');
 
       await tapAndSettle(tester, find.byKey(const ValueKey('start')));
       expect(find.text('選擇夜市'), findsOneWidget, reason: '先進選擇夜市，不會直接開始');
@@ -1004,7 +1045,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('skin_starry'))); // 500，不夠
       await tester.pump();
-      expect(find.text('金幣不夠，還差 🪙 100'), findsOneWidget);
+      expect(findCoinText('金幣不夠，還差 🪙 100'), findsOneWidget);
       expect(store.coins, 400);
 
       await tester.tap(find.byKey(const ValueKey('skin_fortune'))); // 300
@@ -1015,7 +1056,7 @@ void main() {
 
       await tester.pageBack();
       await settle(tester);
-      expect(find.text('🪙 100'), findsOneWidget);
+      expect(findCoinText('🪙 100'), findsOneWidget);
       expect(find.text('福'), findsNWidgets(2)); // 首頁扇形卡片的兩張卡背
     });
 
@@ -1037,7 +1078,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('upgrade_hat'))); // 600，不夠
       await tester.pump();
-      expect(find.text('金幣不夠，還差 🪙 500'), findsOneWidget);
+      expect(findCoinText('金幣不夠，還差 🪙 500'), findsOneWidget);
     });
 
     testWidgets('成就：達成會顯示紅點，領取後拿到金幣', (tester) async {
@@ -1105,7 +1146,7 @@ void main() {
       await tester.pageBack();
       await settle(tester);
       expect(find.text('第 1 攤・南機場夜市'), findsOneWidget);
-      expect(find.text('🪙 0'), findsOneWidget);
+      expect(findCoinText('🪙 0'), findsOneWidget);
     });
   
     testWidgets('選擇夜市：打開時在最上面，18 攤可以捲動', (tester) async {
@@ -1239,7 +1280,7 @@ void main() {
   });
 
   group('夜市大胃王', () {
-    /// 直接打開夜市大胃王。
+    /// 直接打開夜市大胃王（不翻牌，方便測試）。
     Future<void> pumpEndless(WidgetTester tester, {Map<String, Object> saved = const {}}) async {
       await setUpStore(tester, saved);
       await tester.pumpWidget(MaterialApp(
@@ -1247,29 +1288,47 @@ void main() {
       ));
     }
 
-    /// 用同樣的種子在旁邊跑一份，得知牌的位置。畫面補牌和這份補牌的順序一樣，結果就會一樣。
+    /// 用同樣的種子在旁邊跑一份，得知牌的位置。畫面發牌和這份發牌的順序一樣，結果就會一樣。
     EndlessGame mirrorEndless() => EndlessGame(random: Random(1));
 
-    /// 在畫面上配對一組，等補牌完成，旁邊那份也跟著做。
-    Future<void> eatPair(WidgetTester tester, EndlessGame g) async {
-      late int a, b;
-      outer:
-      for (a = 0; a < g.cards.length; a++) {
-        for (b = a + 1; b < g.cards.length; b++) {
-          if (g.cards[a] == g.cards[b]) break outer;
+    (int, int) pairIn(EndlessGame g) {
+      for (var a = 0; a < g.boardSize; a++) {
+        if (g.isMatched[a]) continue;
+        for (var b = a + 1; b < g.boardSize; b++) {
+          if (!g.isMatched[b] && g.cards[a] == g.cards[b]) return (a, b);
         }
       }
+      throw StateError('no pair');
+    }
+
+    /// 清桌動畫播多久（和畫面的設定一致）。
+    const clearAnimation = Duration(milliseconds: 1600);
+
+    /// 在畫面上配對一組，等相撞動畫播完；清桌的話再等清桌動畫、發下一桌，旁邊那份也跟著做。
+    Future<void> eatPair(WidgetTester tester, EndlessGame g) async {
+      final (a, b) = pairIn(g);
       await tester.tap(find.byKey(ValueKey('card_$a')));
       await tester.tap(find.byKey(ValueKey('card_$b')));
       g.pick(a);
       g.pick(b);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 950)); // 等相撞動畫播完、補牌
+      await tester.pump(const Duration(milliseconds: 950)); // 等相撞動畫
+      if (g.tableCleared) {
+        await tester.pump(clearAnimation); // 等清桌動畫、發下一桌
+        g.nextTable();
+      }
       await tester.pump(const Duration(milliseconds: 400)); // 等發牌動畫
-      g.refill();
+    }
+
+    /// 一直清桌，直到第 [table] 桌。
+    Future<void> clearUntil(WidgetTester tester, EndlessGame g, int table) async {
+      while (g.table < table) {
+        await eatPair(tester, g);
+      }
     }
 
     String textOf(WidgetTester tester, String key) => tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+    Opacity slot(WidgetTester tester, int i) => tester.widget<Opacity>(find.byKey(ValueKey('slot_visible_$i')));
 
     /// 等時間用完、結算視窗跳出來。
     Future<void> runOutOfTime(WidgetTester tester) async {
@@ -1277,48 +1336,104 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
 
-    testWidgets('首頁可以進入夜市大胃王，16 張牌', (tester) async {
+    testWidgets('首頁可以進入夜市大胃王，第 1 桌 2×2', (tester) async {
       await pumpHome(tester);
       expect(find.text('無盡挑戰，吃越多分越高'), findsOneWidget);
       await tapAndSettle(tester, find.byKey(const ValueKey('endless')));
       expect(find.text('夜市大胃王'), findsOneWidget);
-      expect(find.byKey(const ValueKey('card_15')), findsOneWidget);
-      expect(find.byKey(const ValueKey('card_16')), findsNothing);
+      expect(find.byKey(const ValueKey('card_3')), findsOneWidget);
+      expect(find.byKey(const ValueKey('card_4')), findsNothing);
+      expect(find.text('第 1 桌・最高分 0'), findsOneWidget);
       expect(textOf(tester, 'time'), '60');
     });
 
-    testWidgets('配對成功加分、加時間，補上新牌後可以一直配下去', (tester) async {
+    testWidgets('配對成功加分、加時間，位置空著不補牌', (tester) async {
       await pumpEndless(tester);
       final g = mirrorEndless();
       await tester.pump(const Duration(seconds: 5));
       expect(textOf(tester, 'time'), '55');
-
+      final (a, b) = pairIn(g);
       await eatPair(tester, g);
       expect(textOf(tester, 'score'), '100');
-      expect(textOf(tester, 'time'), '57', reason: '55 秒 +3 秒，配對和補牌過了 1 秒');
-      expect(find.textContaining('+3 秒'), findsOneWidget);
-
-      // 補牌後畫面和旁邊那份一致：照著配下去，分數要完全一樣
-      for (var i = 0; i < 12; i++) {
-        await eatPair(tester, g);
-      }
-      expect(textOf(tester, 'score'), '${g.score}');
-      expect(g.matches, 13);
-      expect(find.byKey(const ValueKey('endless_progress')), findsOneWidget);
-      expect(find.text('已吃 13 組・最高分 ${g.score}'), findsOneWidget);
+      expect(textOf(tester, 'time'), '57', reason: '55 秒 +3 秒，配對和動畫過了 1 秒');
+      expect(slot(tester, a).opacity, 0, reason: '消掉的位置空著');
+      expect(slot(tester, b).opacity, 0);
       expect(store.discoveredFoods, isNotEmpty, reason: '大胃王配到的小吃也會收錄圖鑑');
     });
 
-    testWidgets('配對成功：兩張牌浮起來往中間飛、相撞後才放特效，消失後補新牌', (tester) async {
+    testWidgets('清桌：大動畫、+500 分、+5 秒、計時暫停，播完發第 2 桌', (tester) async {
       await pumpEndless(tester);
       final g = mirrorEndless();
-      late int a, b;
-      outer:
-      for (a = 0; a < 16; a++) {
-        for (b = a + 1; b < 16; b++) {
-          if (g.cards[a] == g.cards[b]) break outer;
-        }
+      await tester.pump(const Duration(seconds: 20));
+      await eatPair(tester, g); // 第一組
+      final (a, b) = pairIn(g);
+      await tester.tap(find.byKey(ValueKey('card_$a')));
+      await tester.tap(find.byKey(ValueKey('card_$b')));
+      g.pick(a);
+      g.pick(b);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 950));
+      // 清桌動畫
+      expect(find.byKey(const ValueKey('table_clear')), findsOneWidget);
+      expect(find.text('清桌！'), findsOneWidget);
+      expect(find.text('+500'), findsOneWidget);
+      expect(find.text('清桌！第 1 桌 +500・+5 秒'), findsOneWidget);
+      // 煙火一發一發在牌桌各處炸開
+      await tester.pump(const Duration(milliseconds: 650));
+      final bursts = find.byType(MatchBurst);
+      expect(bursts.evaluate().length, greaterThanOrEqualTo(6), reason: '同時有很多發煙火');
+      final centers = [for (final e in bursts.evaluate()) tester.getCenter(find.byWidget(e.widget))];
+      final spreadX = centers.map((c) => c.dx).reduce(max) - centers.map((c) => c.dx).reduce(min);
+      final spreadY = centers.map((c) => c.dy).reduce(max) - centers.map((c) => c.dy).reduce(min);
+      expect(spreadX, greaterThan(100), reason: '左右散開');
+      expect(spreadY, greaterThan(100), reason: '上下散開');
+      expect(textOf(tester, 'score'), '${100 + 200 + 500}');
+      final time = textOf(tester, 'time');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(textOf(tester, 'time'), time, reason: '清桌動畫期間不倒數');
+
+      // 第 2 桌
+      await tester.pump(const Duration(milliseconds: 550));
+      g.nextTable();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('table_clear')), findsNothing);
+      expect(find.byType(MatchBurst), findsNothing, reason: '煙火在下一桌開始前就放完');
+      expect(find.text('第 2 桌・最高分 800'), findsOneWidget);
+      for (var i = 0; i < 4; i++) {
+        expect(slot(tester, i).opacity, 1, reason: '新的一桌全部發好');
+        final card = tester.widget<CardWidget>(find.byKey(ValueKey('card_$i')));
+        expect(card.isShow, isFalse);
+        expect(card.food, g.cards[i]);
       }
+      expect(find.text('第 2 桌，開吃！'), findsOneWidget);
+    });
+
+    testWidgets('越後面牌越多：第 3 桌 3×2、第 6 桌 4×2、第 10 桌 4×4', (tester) async {
+      await pumpEndless(tester);
+      final g = mirrorEndless();
+      Rect rect(int i) => tester.getRect(find.byKey(ValueKey('card_$i')));
+      int columnsOnScreen() {
+        final top = rect(0).top;
+        var n = 0;
+        while (find.byKey(ValueKey('card_$n')).evaluate().isNotEmpty && (rect(n).top - top).abs() < 1) {
+          n++;
+        }
+        return n;
+      }
+
+      for (final (table, cards, columns) in [(3, 6, 3), (6, 8, 4), (10, 16, 4)]) {
+        await clearUntil(tester, g, table);
+        expect(find.byKey(ValueKey('card_${cards - 1}')), findsOneWidget, reason: '第 $table 桌');
+        expect(find.byKey(ValueKey('card_$cards')), findsNothing);
+        expect(columnsOnScreen(), columns, reason: '第 $table 桌欄數');
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('配對成功：兩張牌浮起來往中間飛、相撞後才放特效，消失後位置空著', (tester) async {
+      await pumpEndless(tester);
+      final g = mirrorEndless();
+      final (a, b) = pairIn(g);
       final startA = tester.getCenter(find.byKey(ValueKey('card_$a')));
       final startB = tester.getCenter(find.byKey(ValueKey('card_$b')));
       final mid = (startA + startB) / 2;
@@ -1329,45 +1444,37 @@ void main() {
       final fly = find.byKey(const ValueKey('merge_fly'));
       final flying = find.descendant(of: fly, matching: find.byType(CardWidget));
       double gap() => (tester.getCenter(flying.at(0)) - tester.getCenter(flying.at(1))).distance;
-      Opacity slot(int i) => tester.widget<Opacity>(find.byKey(ValueKey('slot_visible_$i')));
 
       expect(fly, findsOneWidget);
       expect(flying, findsNWidgets(2));
-      expect(slot(a).opacity, 0, reason: '原本的格子先空著，不會同時畫兩張');
-      expect(slot(b).opacity, 0);
+      expect(slot(tester, a).opacity, 0, reason: '原本的格子空著，不會同時畫兩張');
       final startGap = gap();
 
-      // 浮起來：還沒往中間飛，但往上移
       await tester.pump(const Duration(milliseconds: 150));
-      expect(tester.getCenter(flying.at(0)).dy, lessThan(startA.dy));
-      expect(find.text('+100'), findsNothing, reason: '還沒撞上，不放特效');
+      expect(tester.getCenter(flying.at(0)).dy, lessThan(startA.dy), reason: '先浮起來');
+      expect(find.text('+100'), findsNothing);
 
-      // 飛到快撞上：兩張距離大幅縮短，卡牌保持正的（不旋轉）
       await tester.pump(const Duration(milliseconds: 330));
       expect(gap(), lessThan(startGap * 0.5));
       expect(find.descendant(of: fly, matching: find.byType(Transform)).evaluate().every((e) {
         final m = (e.widget as Transform).transform;
         return m.entry(0, 1).abs() < 1e-9 && m.entry(1, 0).abs() < 1e-9;
       }), isTrue, reason: '飛行中沒有旋轉');
-      expect(find.text('+100'), findsNothing);
 
-      // 撞上：重疊在中點，從中間飄分數
       await tester.pump(const Duration(milliseconds: 100));
       expect(gap(), lessThan(1), reason: '兩張重疊');
-      expect((tester.getCenter(flying.at(0)) - mid).distance, lessThan(14), reason: '在兩張牌的中點（含浮起的高度）');
+      expect((tester.getCenter(flying.at(0)) - mid).distance, lessThan(14));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('+100'), findsOneWidget);
 
-      // 消失、補新牌
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump();
       expect(fly, findsNothing);
-      expect(slot(a).opacity, 1);
-      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$a'))).isMatched, isFalse, reason: '已補上新牌');
+      expect(slot(tester, a).opacity, 0, reason: '不補牌，位置空著');
       await tester.pump(const Duration(milliseconds: 1200));
     });
 
-    testWidgets('減少動態效果時不飛不撞，牌發光一下就補新牌', (tester) async {
+    testWidgets('減少動態效果時不飛不撞，配對的牌直接消失，清桌照樣發下一桌', (tester) async {
       await setUpStore(tester, const {});
       await tester.pumpWidget(MaterialApp(
         home: MediaQuery(
@@ -1376,51 +1483,33 @@ void main() {
         ),
       ));
       final g = mirrorEndless();
-      late int a, b;
-      outer:
-      for (a = 0; a < 16; a++) {
-        for (b = a + 1; b < 16; b++) {
-          if (g.cards[a] == g.cards[b]) break outer;
-        }
-      }
+      final (a, b) = pairIn(g);
       await tester.tap(find.byKey(ValueKey('card_$a')));
       await tester.tap(find.byKey(ValueKey('card_$b')));
+      g.pick(a);
+      g.pick(b);
       await tester.pump();
       expect(find.byKey(const ValueKey('merge_fly')), findsNothing);
-      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$a'))).isMatched, isTrue);
-      await tester.pump(const Duration(milliseconds: 700));
-      expect(tester.widget<CardWidget>(find.byKey(ValueKey('card_$a'))).isMatched, isFalse);
-    });
-
-    testWidgets('「新」標記：開局翻牌後沒有，補上的牌有，翻過就消失', (tester) async {
-      await setUpStore(tester, const {});
-      await tester.pumpWidget(MaterialApp(
-        home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1)),
-      ));
-      await tester.pump(const Duration(seconds: previewMemorizeSeconds));
-      await tester.pump(const Duration(milliseconds: 500));
-      final badge = find.byKey(const ValueKey('card_badge'));
-      expect(badge, findsNothing, reason: '開局翻牌全部看過');
-
-      final g = mirrorEndless();
-      await eatPair(tester, g);
-      expect(badge, findsNWidgets(2), reason: '補上的兩張是新的');
-      for (final i in g.lastRefilled) {
-        expect(find.descendant(of: find.byKey(ValueKey('card_$i')), matching: badge), findsOneWidget);
-      }
-      final first = g.lastRefilled.first;
-      await tester.tap(find.byKey(ValueKey('card_$first')));
+      expect(slot(tester, a).opacity, 0);
+      final (c, d) = pairIn(g);
+      await tester.tap(find.byKey(ValueKey('card_$c')));
+      await tester.tap(find.byKey(ValueKey('card_$d')));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.descendant(of: find.byKey(ValueKey('card_$first')), matching: badge), findsNothing);
+      expect(find.byKey(const ValueKey('table_clear')), findsOneWidget);
+      await tester.pump(clearAnimation);
+      expect(find.text('第 2 桌・最高分 800'), findsOneWidget);
+      expect(slot(tester, a).opacity, 1);
     });
 
     testWidgets('連錯兩次：老闆亮出一組對子，過一下再蓋回去', (tester) async {
       await pumpEndless(tester);
       final g = mirrorEndless();
+      await clearUntil(tester, g, 3); // 3×2 的桌，有足夠的牌可以翻錯
       bool shown(int i) => tester.widget<CardWidget>(find.byKey(ValueKey('card_$i'))).isShow;
       (int, int) mismatch() {
-        for (var a = 0; a < 16; a++) {
-          for (var b = a + 1; b < 16; b++) {
+        for (var a = 0; a < g.boardSize; a++) {
+          for (var b = a + 1; b < g.boardSize; b++) {
             if (g.cards[a] != g.cards[b]) return (a, b);
           }
         }
@@ -1438,31 +1527,11 @@ void main() {
         g.hideMismatched();
       }
       expect(find.text('老闆偷偷告訴你：這兩張是一對！'), findsOneWidget);
-      final up = [for (var i = 0; i < 16; i++) if (shown(i)) i];
+      final up = [for (var i = 0; i < g.boardSize; i++) if (shown(i)) i];
       expect(up.length, 2);
       expect(g.cards[up[0]], g.cards[up[1]], reason: '亮出來的是一對');
-
       await tester.pump(const Duration(milliseconds: 1300));
-      expect([for (var i = 0; i < 16; i++) if (shown(i)) i], isEmpty, reason: '提示結束蓋回去');
-
-      // 照著提示配對
-      await tester.tap(find.byKey(ValueKey('card_${up[0]}')));
-      await tester.tap(find.byKey(ValueKey('card_${up[1]}')));
-      await tester.pump();
-      expect(textOf(tester, 'score'), '100');
-      await tester.pump(const Duration(seconds: 2));
-    });
-
-    testWidgets('補上的新牌是蓋著的', (tester) async {
-      await pumpEndless(tester);
-      final g = mirrorEndless();
-      await eatPair(tester, g);
-      for (final i in g.lastRefilled) {
-        final card = tester.widget<CardWidget>(find.byKey(ValueKey('card_$i')));
-        expect(card.isShow, isFalse);
-        expect(card.isMatched, isFalse);
-        expect(card.food, g.cards[i]);
-      }
+      expect([for (var i = 0; i < g.boardSize; i++) if (shown(i)) i], isEmpty, reason: '提示結束蓋回去');
     });
 
     testWidgets('時間到：破紀錄、存最高分，按再吃一輪才發金幣', (tester) async {
@@ -1471,19 +1540,22 @@ void main() {
       for (var i = 0; i < 3; i++) {
         await eatPair(tester, g);
       }
-      expect(g.score, 600);
+      expect(g.score, 100 + 200 + 500 + 300, reason: '第 1 桌兩組加清桌，第 2 桌一組');
       await runOutOfTime(tester);
       expect(find.text('新紀錄！吃飽收攤'), findsOneWidget);
-      expect(find.text('總分 600'), findsOneWidget);
+      expect(find.text('總分 1100'), findsOneWidget);
+      expect(find.text('清了 1 桌、吃了 3 組，最高 3 連擊'), findsOneWidget);
       expect(find.text('刷新最高分！（原本 0）'), findsOneWidget);
-      expect(find.text('獲得 🪙 30'), findsOneWidget, reason: '600 分 ÷ 20');
-      expect(store.endlessBest, 600, reason: '時間到就先存最高分');
+      expect(findCoinText('獲得 🪙 55'), findsOneWidget, reason: '1100 分 ÷ 20');
+      expect(store.endlessBest, 1100, reason: '時間到就先存最高分');
       expect(store.coins, 0, reason: '還沒決定要不要續命，先不發金幣');
 
       await tapAndSettle(tester, find.text('再吃一輪'));
-      expect(store.coins, 30);
+      expect(store.coins, 55);
       expect(textOf(tester, 'score'), '0');
       expect(textOf(tester, 'time'), '60');
+      expect(find.text('第 1 桌・最高分 1100'), findsOneWidget);
+      expect(find.byKey(const ValueKey('card_4')), findsNothing, reason: '回到第 1 桌');
     });
 
     testWidgets('沒破紀錄時顯示原本的最高分', (tester) async {
@@ -1501,6 +1573,12 @@ void main() {
       await eatPair(tester, g);
       await runOutOfTime(tester);
 
+      // 廣告是亮黃色實心按鈕，再吃一輪、回到首頁是黃色外框
+      expect(find.ancestor(of: find.text('看廣告 +15 秒繼續吃'), matching: find.byType(FilledButton)), findsOneWidget);
+      for (final label in ['再吃一輪', '回到首頁']) {
+        expect(find.ancestor(of: find.text(label), matching: find.byType(OutlinedButton)), findsOneWidget, reason: label);
+      }
+
       ads.rewardSucceeds = false;
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
       await tester.pump();
@@ -1517,7 +1595,6 @@ void main() {
       expect(find.text('多 15 秒，繼續吃！'), findsOneWidget);
       expect(store.coins, 0);
 
-      // 續命後時間到：不能再續命
       await tester.pump(const Duration(seconds: 15));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const ValueKey('dialog_ad')), findsNothing);
@@ -1529,14 +1606,15 @@ void main() {
     testWidgets('結算視窗顯示新達成的成就；續命和廣告失敗都只算一輪', (tester) async {
       await pumpEndless(tester);
       final g = mirrorEndless();
-      for (var i = 0; i < 5; i++) {
+      for (var i = 0; i < 3; i++) {
         await eatPair(tester, g);
       }
-      expect(g.score, 1500);
+      expect(g.score, 1100);
       await runOutOfTime(tester);
       expect(find.text('🏆 成就達成：開吃！'), findsOneWidget);
+      expect(find.text('🏆 成就達成：吃飽飽'), findsNothing, reason: '還不到 2000 分');
       expect(store.endlessRounds, 1);
-      expect(store.endlessBestMatches, 5);
+      expect(store.endlessBestMatches, 3);
 
       ads.rewardSucceeds = false;
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
@@ -1551,12 +1629,10 @@ void main() {
       for (var i = 0; i < 2; i++) {
         await eatPair(tester, g);
       }
-      expect(g.score, 2500, reason: '續命後連擊延續：1500 + 500 + 500（連擊上限 5）');
-      await tester.pump(const Duration(seconds: 20));
-      await tester.pump(const Duration(milliseconds: 400));
+      expect(g.score, 1100 + 400 + 1000 + 500, reason: '續命後清掉第 2 桌，再吃第 3 桌一組');
+      await runOutOfTime(tester);
       expect(store.endlessRounds, 1, reason: '續命後再結算還是同一輪');
-      expect(store.endlessBest, 2500);
-      expect(find.text('🏆 成就達成：開吃！'), findsOneWidget);
+      expect(store.endlessBest, 3000);
       expect(find.text('🏆 成就達成：吃飽飽'), findsOneWidget, reason: '續命後才達到 2000 分');
 
       await tapAndSettle(tester, find.text('再吃一輪'));
@@ -1577,15 +1653,16 @@ void main() {
       expect(store.coins, 0);
     });
 
-    testWidgets('小螢幕不會跑版（含補牌中）', (tester) async {
+    testWidgets('小螢幕不會跑版：2×2 的第 1 桌和 4×4 的第 10 桌', (tester) async {
       for (final size in const [Size(640, 1136), Size(750, 1334)]) {
         await pumpEndless(tester);
         tester.view.physicalSize = size;
         tester.view.devicePixelRatio = 2;
         await tester.pump();
-        expect(tester.takeException(), isNull, reason: '$size');
-        await eatPair(tester, mirrorEndless());
-        expect(tester.takeException(), isNull, reason: '$size 補牌後');
+        expect(tester.takeException(), isNull, reason: '$size 第 1 桌');
+        final g = mirrorEndless();
+        await clearUntil(tester, g, 10);
+        expect(tester.takeException(), isNull, reason: '$size 第 10 桌');
         for (var i = 0; i < 16; i++) {
           final rect = tester.getRect(find.byKey(ValueKey('card_$i')));
           expect(rect.bottom, lessThan(size.height / 2), reason: '$size 第 $i 張超出畫面');
@@ -1651,10 +1728,10 @@ void main() {
       ));
       await tester.pump(const Duration(milliseconds: 400));
       final topLeft = tester.getRect(find.byKey(const ValueKey('card_0')));
-      final bottomRight = tester.getRect(find.byKey(const ValueKey('card_15')));
+      final bottomRight = tester.getRect(find.byKey(const ValueKey('card_3')));
       final board = Rect.fromPoints(topLeft.topLeft, bottomRight.bottomRight);
       expect((tester.getRect(hint).center - board.center).distance, lessThan(2), reason: '提示框置中在牌桌上');
-      expect(tester.getRect(hint).width, lessThan(board.width * 0.75), reason: '框做小，少擋一點牌');
+      expect(tester.getRect(hint).width, lessThan(board.width), reason: '框比牌桌小');
       final box = tester.widget<Container>(hint).decoration! as BoxDecoration;
       expect(box.color!.a, lessThan(0.7), reason: '半透明，看得到底下的牌');
 
@@ -1687,11 +1764,11 @@ void main() {
         home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1)),
       ));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(allFaceUp(tester, 16), isTrue);
+      expect(allFaceUp(tester, 4), isTrue);
       expect(countdown(tester), '$seconds');
       await tester.pump(const Duration(seconds: seconds));
       await tester.pump(const Duration(milliseconds: 400));
-      expect(anyFaceUp(tester, 16), isFalse);
+      expect(anyFaceUp(tester, 4), isFalse);
       expect(hint, findsNothing);
       expect(timeText(tester), '60');
 
@@ -1703,7 +1780,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(timeText(tester), '15');
       expect(hint, findsNothing);
-      expect(anyFaceUp(tester, 16), isFalse, reason: '續命是同一輪，不再翻牌');
+      expect(anyFaceUp(tester, 4), isFalse, reason: '續命是同一輪，不再翻牌');
 
       // 再吃一輪：重新翻牌倒數
       await tester.pump(const Duration(seconds: 16));
@@ -1712,8 +1789,53 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(hint, findsOneWidget);
-      expect(allFaceUp(tester, 16), isTrue);
+      expect(allFaceUp(tester, 4), isTrue);
       await tester.pump(const Duration(seconds: seconds + 1));
+    });
+
+    testWidgets('大胃王：清桌後的新一桌翻開 3 秒，翻牌期間不扣時間', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1)),
+      ));
+      await tester.pump(const Duration(seconds: seconds));
+      await tester.pump(const Duration(milliseconds: 400));
+      final g = EndlessGame(random: Random(1));
+      for (var n = 0; n < 2; n++) {
+        late int a, b;
+        outer:
+        for (a = 0; a < 4; a++) {
+          for (b = a + 1; b < 4; b++) {
+            if (!g.isMatched[a] && !g.isMatched[b] && g.cards[a] == g.cards[b]) break outer;
+          }
+        }
+        await tester.tap(find.byKey(ValueKey('card_$a')));
+        await tester.tap(find.byKey(ValueKey('card_$b')));
+        g.pick(a);
+        g.pick(b);
+        await tester.pump();
+      }
+      await tester.pump(const Duration(milliseconds: 950)); // 相撞
+      // 清桌動畫：每 0.1 秒畫一次，煙火才會在施放的時間點開始播（一次跳 1.6 秒會全部擠在最後才開始）
+      for (var i = 0; i < 16; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(hint, findsOneWidget, reason: '第 2 桌也翻牌');
+      expect(find.byType(MatchBurst), findsNothing, reason: '「記住所有卡牌」的時候沒有煙火');
+      expect(countdown(tester), '3');
+      expect(allFaceUp(tester, 4), isTrue);
+      final time = timeText(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(timeText(tester), time, reason: '翻牌期間不扣時間');
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(hint, findsNothing);
+      expect(anyFaceUp(tester, 4), isFalse);
+      expect(find.text('第 2 桌，開吃！'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      // 計時器跨桌一直在跑，蓋牌後 1.4 秒內可能扣 1 或 2 秒，只確認有繼續倒數
+      expect(int.parse(timeText(tester)), lessThan(int.parse(time)), reason: '蓋牌後繼續計時');
     });
 
     testWidgets('提示框在小螢幕上不會跑版', (tester) async {

@@ -102,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
             MenuButton(
               key: const ValueKey('endless'),
               primary: true,
-              icon: Icons.local_fire_department_rounded,
+              icon: Icons.ramen_dining_rounded,
               label: EndlessScreen.title,
               subtitle: _store.endlessBest > 0 ? '最高分 ${_store.endlessBest}' : '無盡挑戰，吃越多分越高',
               onPressed: () => _open(EndlessScreen(
@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 10),
             MenuButton(
               key: const ValueKey('start'),
-              icon: Icons.directions_walk_rounded,
+              icon: Icons.map_rounded,
               label: '夜市走透透',
               subtitle: '第 ${_latestLevel + 1} 攤・${latest.name}',
               // 先到選擇夜市的列表，選好一攤才開始
