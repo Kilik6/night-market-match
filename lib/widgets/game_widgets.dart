@@ -46,7 +46,7 @@ class ItemTile extends StatelessWidget {
 
 /// 有「廣告」標籤的按鈕，讓玩家一眼看出按了會播廣告。
 class AdButton extends StatelessWidget {
-  const AdButton({super.key, required this.label, required this.onPressed, this.onPaper = false});
+  const AdButton({super.key, required this.label, required this.onPressed, this.onPaper = false, this.fill});
 
   final String label;
   final VoidCallback? onPressed;
@@ -54,12 +54,19 @@ class AdButton extends StatelessWidget {
   /// 放在米色結果視窗上時改用深一點的顏色。
   final bool onPaper;
 
+  /// 按鈕底色；沒指定就是透明（只有外框）。
+  final Color? fill;
+
+  /// 廣告按鈕的文字樣式，時間到視窗的其他按鈕也用一樣的字。
+  static const adLabelStyle = TextStyle(fontSize: 15, fontWeight: FontWeight.w500);
+
   @override
   Widget build(BuildContext context) {
     final color = onPaper ? const Color(0xFFA2580A) : NightColors.glow;
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
+        backgroundColor: fill,
         foregroundColor: color,
         disabledForegroundColor: color.withValues(alpha: 0.4),
         side: BorderSide(color: onPressed == null ? color.withValues(alpha: 0.3) : color, width: 1.5),
@@ -81,7 +88,7 @@ class AdButton extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Flexible(child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500))),
+          Flexible(child: Text(label, style: adLabelStyle)),
         ],
       ),
     );
@@ -108,9 +115,12 @@ class ResultDialog extends StatelessWidget {
   final String? adLabel;
   final int? stars;
 
-  /// 主打廣告：廣告按鈕亮黃色實心，其他兩個按鈕改成黃色外框（時間到了的視窗用）。
+  /// 時間到的視窗用：廣告按鈕排第一個（淺黃底、深黃字和外框），其他兩個按鈕改成黃色外框。
   /// 沒有廣告選項時照一般樣式。
   final bool emphasizeAd;
+
+  /// 時間到視窗的廣告按鈕底色。
+  static const adFill = Color(0xFFFFE08A);
 
   static const _shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)));
   static const _padding = EdgeInsets.symmetric(vertical: 12);
@@ -125,31 +135,8 @@ class ResultDialog extends StatelessWidget {
           padding: _padding,
           shape: _shape,
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-      );
-
-  /// 亮黃色實心的廣告按鈕，左邊有「廣告」小標籤。
-  Widget _filledAd(BuildContext context) => FilledButton(
-        key: const ValueKey('dialog_ad'),
-        onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
-        style: FilledButton.styleFrom(
-          backgroundColor: NightColors.glow,
-          foregroundColor: NightColors.ink,
-          padding: _padding,
-          shape: _shape,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(color: NightColors.ink, borderRadius: BorderRadius.circular(4)),
-              child: const Text('廣告', style: TextStyle(fontSize: 11, color: NightColors.paper)),
-            ),
-            const SizedBox(width: 8),
-            Flexible(child: Text(adLabel!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
-          ],
-        ),
+        // 跟廣告按鈕一樣的字，不要太粗
+        child: Text(label, style: AdButton.adLabelStyle),
       );
 
   @override
@@ -182,7 +169,14 @@ class ResultDialog extends StatelessWidget {
               CoinText(line, textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
             const SizedBox(height: 16),
             if (adFirst) ...[
-              _filledAd(context),
+              AdButton(
+                key: const ValueKey('dialog_ad'),
+                label: adLabel!,
+                onPaper: true,
+                // 淺黃底：深黃字放在亮黃底上對比太低，用淺一點的黃字才看得清楚
+                fill: adFill,
+                onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
+              ),
               const SizedBox(height: 10),
               _outlined(null, primaryLabel, () => Navigator.of(context).pop(ResultChoice.primary)),
               const SizedBox(height: 10),

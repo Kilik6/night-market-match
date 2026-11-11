@@ -730,13 +730,25 @@ void main() {
       await tester.pump(const Duration(seconds: 60));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('時間到了'), findsOneWidget);
-      // 廣告是亮黃色實心按鈕，其他兩個是黃色外框
-      expect(find.ancestor(of: find.text('看廣告 +15 秒繼續'), matching: find.byType(FilledButton)), findsOneWidget);
+      // 廣告維持原本的深黃字外框樣式、排第一個，其他兩個是黃色外框
+      final adSide = tester
+          .widget<OutlinedButton>(find.descendant(of: find.byKey(const ValueKey('dialog_ad')), matching: find.byType(OutlinedButton)))
+          .style!
+          .side!
+          .resolve({})!;
+      expect(adSide.color, const Color(0xFFA2580A), reason: '廣告按鈕是原本的深黃色');
+      final adFill = tester
+          .widget<OutlinedButton>(find.descendant(of: find.byKey(const ValueKey('dialog_ad')), matching: find.byType(OutlinedButton)))
+          .style!
+          .backgroundColor!
+          .resolve({});
+      expect(adFill, ResultDialog.adFill, reason: '廣告按鈕黃色底');
       for (final label in ['重新開始這一攤', '回到夜市列表']) {
         final button = find.ancestor(of: find.text(label), matching: find.byType(OutlinedButton));
         expect(button, findsOneWidget, reason: label);
         final side = tester.widget<OutlinedButton>(button).style!.side!.resolve({})!;
         expect(side.color, NightColors.glow, reason: '$label 黃色外框');
+        expect(tester.widget<Text>(find.text(label)).style, AdButton.adLabelStyle, reason: '$label 跟看廣告一樣的字');
       }
       final adTop = tester.getTopLeft(find.byKey(const ValueKey('dialog_ad'))).dy;
       expect(adTop, lessThan(tester.getTopLeft(find.text('重新開始這一攤')).dy), reason: '廣告排第一個');
@@ -1573,10 +1585,11 @@ void main() {
       await eatPair(tester, g);
       await runOutOfTime(tester);
 
-      // 廣告是亮黃色實心按鈕，再吃一輪、回到首頁是黃色外框
-      expect(find.ancestor(of: find.text('看廣告 +15 秒繼續吃'), matching: find.byType(FilledButton)), findsOneWidget);
+      // 廣告維持原本的深黃字外框樣式，再吃一輪、回到首頁是黃色外框
+      expect(find.ancestor(of: find.text('看廣告 +15 秒繼續吃'), matching: find.byType(FilledButton)), findsNothing);
       for (final label in ['再吃一輪', '回到首頁']) {
         expect(find.ancestor(of: find.text(label), matching: find.byType(OutlinedButton)), findsOneWidget, reason: label);
+        expect(tester.widget<Text>(find.text(label)).style, AdButton.adLabelStyle, reason: '$label 跟看廣告一樣的字');
       }
 
       ads.rewardSucceeds = false;
