@@ -108,15 +108,93 @@ class MenuButton extends StatelessWidget {
 
 /// 金幣數量標籤。
 class CoinBadge extends StatelessWidget {
-  const CoinBadge({super.key, required this.coins});
+  const CoinBadge({super.key, required this.coins, this.onTopUp});
   final int coins;
+
+  /// 有給的話，顯示成金色膠囊加上發光的「＋」，點下去去儲值（首頁用）。
+  final VoidCallback? onTopUp;
 
   @override
   Widget build(BuildContext context) {
-    return CoinText(
+    final text = CoinText(
       '🪙 $coins',
       key: const ValueKey('coins'),
       style: const TextStyle(color: NightColors.glow, fontSize: 18, fontWeight: FontWeight.w700),
+    );
+    final onTopUp = this.onTopUp;
+    if (onTopUp == null) return text;
+    return Semantics(
+      button: true,
+      label: '儲值金幣',
+      child: Material(
+        color: NightColors.stall,
+        shape: StadiumBorder(side: BorderSide(color: NightColors.glow.withValues(alpha: 0.75), width: 1.5)),
+        child: InkWell(
+          key: const ValueKey('top_up'),
+          customBorder: const StadiumBorder(),
+          onTap: onTopUp,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [text, const SizedBox(width: 8), const _GlowingPlus()],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 儲值膠囊尾端的「＋」：亮黃色圓形，光暈慢慢一明一暗。
+class _GlowingPlus extends StatefulWidget {
+  const _GlowingPlus();
+
+  @override
+  State<_GlowingPlus> createState() => _GlowingPlusState();
+}
+
+class _GlowingPlusState extends State<_GlowingPlus> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations) {
+      _controller.value = 0.5;
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          color: NightColors.glow,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: NightColors.glow.withValues(alpha: 0.35 + 0.45 * _controller.value),
+              blurRadius: 6 + 10 * _controller.value,
+            ),
+          ],
+        ),
+        child: child,
+      ),
+      child: const Icon(Icons.add_rounded, size: 20, color: NightColors.ink),
     );
   }
 }

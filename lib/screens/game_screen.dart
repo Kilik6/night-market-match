@@ -28,7 +28,11 @@ class GameScreen extends StatefulWidget {
     required this.sounds,
     this.random,
     this.previewSeconds = previewMemorizeSeconds,
+    this.levelList = levels,
   });
+
+  /// 關卡列表。遊戲用正式的 [levels]；測試可以換成固定的關卡，讓遊戲機制的測試不受關卡調整影響。
+  final List<Level> levelList;
 
   /// 開局翻開全部牌讓玩家記位置的秒數，0 表示不翻。
   final int previewSeconds;
@@ -90,7 +94,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
-    _startLevel(widget.levelIndex.clamp(0, levels.length - 1));
+    _startLevel(widget.levelIndex.clamp(0, widget.levelList.length - 1));
   }
 
   @override
@@ -112,7 +116,7 @@ class _GameScreenState extends State<GameScreen> {
     _levelIndex = index;
     _bursts.clear();
     _game = MatchingGame(
-      level: levels[index],
+      level: widget.levelList[index],
       random: widget.random,
       bonusSeconds: GearEffects.bonusSeconds(_store.gearLevel(GearType.hat)),
       comboCap: GearEffects.comboCap(_store.gearLevel(GearType.cart)),
@@ -402,7 +406,7 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _showWinDialog() async {
     final earned = _game.coinsEarned;
-    final hasNext = _levelIndex + 1 < levels.length;
+    final hasNext = _levelIndex + 1 < widget.levelList.length;
     final isRecord = await _store.recordStars(_levelIndex, _game.stars);
     if (hasNext) await _store.unlockUpTo(_levelIndex + 2);
     final clears = await _store.addClear();
@@ -423,7 +427,7 @@ class _GameScreenState extends State<GameScreen> {
           for (final a in newAchievements) '🏆 成就達成：${a.name}',
         ],
         adLabel: '看廣告，金幣 ×2',
-        primaryLabel: hasNext ? '前往下一攤：${levels[_levelIndex + 1].name}' : '再玩一次',
+        primaryLabel: hasNext ? '前往下一攤：${widget.levelList[_levelIndex + 1].name}' : '再玩一次',
         leaveLabel: '回到夜市列表',
       ),
     );
@@ -664,24 +668,38 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  /// 牌少的關卡固定的欄數：2 張排 2×1、4 張 2×2、6 張 3×2、8 張 4×2、10 張 5×2。
+  static const smallBoardColumns = {2: 2, 4: 2, 6: 3, 8: 4, 10: 5};
+
+  /// 牌少時卡片最大的寬度。
+  static const maxCardWidth = 110.0;
+
   Widget _buildBoard() {
     const gap = 8.0;
     final count = _game.cards.length;
     final skin = skinById(_store.equippedSkin);
     return LayoutBuilder(builder: (context, constraints) {
-      // 試 4～6 欄，選卡片最大的排法。卡片比例 3:4，取「寬度放得下」和「高度放得下」中較小的尺寸
-      var columns = 4;
-      var cardWidth = 0.0;
-      for (var c = 4; c <= 6; c++) {
+      // 牌少的關卡用固定排法（2×1、2×2、3×2、4×2、5×2）；12 張以上試 4～6 欄，選卡片最大的排法。
+      // 卡片比例 3:4，取「寬度放得下」和「高度放得下」中較小的尺寸；牌少時卡片不要大得太誇張
+      double fit(int c) {
         final rows = (count / c).ceil();
         final byWidth = (constraints.maxWidth - gap * (c - 1)) / c;
         final byHeight = (constraints.maxHeight - gap * (rows - 1)) / rows * 3 / 4;
-        final w = min(byWidth, byHeight);
-        if (w > cardWidth + 0.5) {
-          columns = c;
-          cardWidth = w;
+        return min(byWidth, byHeight);
+      }
+
+      var columns = smallBoardColumns[count] ?? 4;
+      var cardWidth = fit(columns);
+      if (!smallBoardColumns.containsKey(count)) {
+        for (var c = 5; c <= 6; c++) {
+          final w = fit(c);
+          if (w > cardWidth + 0.5) {
+            columns = c;
+            cardWidth = w;
+          }
         }
       }
+      cardWidth = min(cardWidth, maxCardWidth);
       final cardHeight = cardWidth * 4 / 3;
       Offset cardCenter(int i) => Offset(
             (i % columns) * (cardWidth + gap) + cardWidth / 2,

@@ -49,8 +49,9 @@ class ProgressStore {
   int get unlocked => _prefs.getInt(_unlockedKey) ?? 1;
   int get clears => _prefs.getInt(_clearsKey) ?? 0;
 
-  /// 之後做「移除廣告」付費項目時會把這個設成 true。
+  /// 買了「永久移除廣告」：不再播插頁廣告（獎勵廣告保留，玩家可以自己選擇看）。
   bool get adsRemoved => _prefs.getBool(_adsRemovedKey) ?? false;
+  Future<void> setAdsRemoved(bool value) => _prefs.setBool(_adsRemovedKey, value);
 
   /// 音效靜音。
   bool get muted => _prefs.getBool(_mutedKey) ?? false;

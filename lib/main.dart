@@ -4,6 +4,7 @@ import 'screens/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/ad_service.dart';
 import 'services/progress_store.dart';
+import 'services/purchase_service.dart';
 import 'services/sound_service.dart';
 import 'theme.dart';
 
@@ -15,7 +16,9 @@ Future<void> main() async {
   final sounds = AudioSoundService(muted: store.muted, musicOn: store.musicOn);
   // 音效在開場動畫播放時載入，動畫播完、音效也好了才進首頁
   final soundsReady = sounds.init();
-  runApp(NightMarketMatchApp(store: store, ads: ads, sounds: sounds, loading: soundsReady));
+  // 儲值目前用開發測試的假商店（只有 debug 版會成功），之後換成串接 App Store／Google Play 的版本
+  final purchases = DevPurchaseService();
+  runApp(NightMarketMatchApp(store: store, ads: ads, sounds: sounds, purchases: purchases, loading: soundsReady));
 }
 
 class NightMarketMatchApp extends StatefulWidget {
@@ -24,6 +27,7 @@ class NightMarketMatchApp extends StatefulWidget {
     required this.store,
     required this.ads,
     required this.sounds,
+    required this.purchases,
     this.loading,
   });
 
@@ -33,6 +37,7 @@ class NightMarketMatchApp extends StatefulWidget {
 
   /// 開場動畫期間要等完的載入工作。
   final Future<void>? loading;
+  final PurchaseService purchases;
 
   @override
   State<NightMarketMatchApp> createState() => _NightMarketMatchAppState();
@@ -77,7 +82,7 @@ class _NightMarketMatchAppState extends State<NightMarketMatchApp> with WidgetsB
       ),
       home: SplashScreen(
         loading: widget.loading,
-        next: (_) => HomeScreen(store: widget.store, ads: widget.ads, sounds: widget.sounds),
+        next: (_) => HomeScreen(store: widget.store, ads: widget.ads, sounds: widget.sounds, purchases: widget.purchases),
       ),
     );
   }

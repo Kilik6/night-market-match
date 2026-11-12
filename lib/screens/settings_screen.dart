@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../services/progress_store.dart';
+import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/night_scaffold.dart';
 
-/// 設定：背景音樂、音效、重置進度、版本。
+/// 設定：背景音樂、音效、恢復購買、重置進度、版本。
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.store, required this.sounds});
+  const SettingsScreen({super.key, required this.store, required this.sounds, required this.purchases});
 
   final ProgressStore store;
   final SoundService sounds;
+  final PurchaseService purchases;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -32,6 +34,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _sounds.muted = !on;
     _store.setMuted(!on);
     if (on) _sounds.play(Sfx.flip);
+    setState(() {});
+  }
+
+  /// 恢復購買（Apple 規定要有）：換手機的玩家可以拿回「永久移除廣告」。
+  Future<void> _restore() async {
+    final restored = await restorePurchases(widget.purchases, _store);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(switch (restored) {
+          null => '儲值功能即將開放，敬請期待',
+          true => '已恢復「永久移除廣告」',
+          false => '沒有可以恢復的購買項目',
+        }),
+      ));
     setState(() {});
   }
 
@@ -99,6 +117,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: !_sounds.muted,
               activeColor: NightColors.glow,
               onChanged: _setSfx,
+            ),
+          ]),
+          section('購買'),
+          group([
+            ListTile(
+              key: const ValueKey('restore_purchases'),
+              leading: const Icon(Icons.restore_rounded, color: NightColors.glow),
+              title: const Text('恢復購買', style: labelStyle),
+              subtitle: Text(
+                _store.adsRemoved ? '已永久移除廣告' : '換手機後拿回「永久移除廣告」',
+                style: const TextStyle(color: NightColors.mist, fontSize: 13),
+              ),
+              onTap: _restore,
             ),
           ]),
           section('遊戲資料'),

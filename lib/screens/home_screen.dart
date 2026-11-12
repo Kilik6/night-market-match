@@ -6,6 +6,7 @@ import '../game/card_skins.dart';
 import '../game/night_market_data.dart';
 import '../services/ad_service.dart';
 import '../services/progress_store.dart';
+import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
@@ -32,6 +33,7 @@ class HomeScreen extends StatefulWidget {
     required this.sounds,
     this.random,
     this.previewSeconds = previewMemorizeSeconds,
+    this.purchases,
   });
 
   final ProgressStore store;
@@ -42,12 +44,16 @@ class HomeScreen extends StatefulWidget {
   /// 開局翻開全部牌的秒數，傳給兩種模式的遊戲畫面。
   final int previewSeconds;
 
+  /// 商店付款。沒給就用開發測試用的假商店（只有 debug 版會成功）。
+  final PurchaseService? purchases;
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   ProgressStore get _store => widget.store;
+  late final PurchaseService _purchases = widget.purchases ?? DevPurchaseService();
 
   /// 先把小吃圖片載入記憶體，第一次翻到牌時才不會閃一下。
   @override
@@ -95,7 +101,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: const ValueKey('total_stars'),
                   style: const TextStyle(color: Color(0xFFD9A21B), fontSize: 16, fontWeight: FontWeight.w700),
                 ),
-                CoinBadge(coins: _store.coins),
+                // 金幣旁的「＋」直接打開商店的儲值分頁
+                CoinBadge(
+                  coins: _store.coins,
+                  onTopUp: () => _open(ShopScreen(
+                    store: _store,
+                    sounds: widget.sounds,
+                    purchases: _purchases,
+                    initialTab: ShopScreen.topUpTab,
+                  )),
+                ),
               ],
             ),
             Expanded(child: _Hero(skin: skinById(_store.equippedSkin))),
@@ -126,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 _tile('shop', Icons.storefront_rounded, '夜市商店',
-                    () => _open(ShopScreen(store: _store, sounds: widget.sounds))),
+                    () => _open(ShopScreen(store: _store, sounds: widget.sounds, purchases: _purchases))),
                 const SizedBox(width: 10),
                 _tile('daily', Icons.today_rounded, '每日任務',
                     () => _open(DailyScreen(store: _store, sounds: widget.sounds)),
@@ -146,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _tile('howto', Icons.lightbulb_rounded, '玩法說明', () => _open(const HowToPlayScreen())),
                 const SizedBox(width: 10),
                 _tile('settings', Icons.settings_rounded, '設定',
-                    () => _open(SettingsScreen(store: _store, sounds: widget.sounds))),
+                    () => _open(SettingsScreen(store: _store, sounds: widget.sounds, purchases: _purchases))),
               ],
             ),
           ],

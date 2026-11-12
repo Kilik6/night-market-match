@@ -47,25 +47,25 @@ class Level {
 }
 
 /// 夜市依知名度排序：前面是比較冷門的，最熱門的放在最後最難的關卡。
-/// 難度：前 6 攤逐步增加牌數；之後牌數最多 24 張（小螢幕也點得到），
-/// 主要靠縮短時間增加難度，平均每組可用的秒數從 10 秒逐漸降到 4 秒。
+/// 難度：牌數由少到多（2 → 4 → 6 → 8 → 10 → 12 → 16 → 20 張），同一階段的關卡逐關縮短時間；
+/// 平均每組可用的秒數從十幾秒逐漸降到約 4 秒。每局開始還有翻牌記憶的時間，不算在內。
 const levels = <Level>[
-  Level(name: '南機場夜市', city: '台北', pairs: 6, seconds: 60),
-  Level(name: '城隍廟夜市', city: '新竹', pairs: 8, seconds: 70),
-  Level(name: '中壢觀光夜市', city: '桃園', pairs: 10, seconds: 85),
-  Level(name: '樂華夜市', city: '新北', pairs: 10, seconds: 70),
-  Level(name: '華西街夜市', city: '台北', pairs: 12, seconds: 95),
-  Level(name: '大東夜市', city: '台南', pairs: 12, seconds: 80),
-  Level(name: '文化路夜市', city: '嘉義', pairs: 8, seconds: 45),
-  Level(name: '東大門夜市', city: '花蓮', pairs: 10, seconds: 60),
-  Level(name: '一中街', city: '台中', pairs: 12, seconds: 75),
-  Level(name: '瑞豐夜市', city: '高雄', pairs: 10, seconds: 50),
-  Level(name: '寧夏夜市', city: '台北', pairs: 12, seconds: 70),
-  Level(name: '羅東夜市', city: '宜蘭', pairs: 12, seconds: 65),
-  Level(name: '基隆廟口夜市', city: '基隆', pairs: 12, seconds: 62),
-  Level(name: '花園夜市', city: '台南', pairs: 12, seconds: 58),
-  Level(name: '六合夜市', city: '高雄', pairs: 12, seconds: 55),
-  Level(name: '饒河街夜市', city: '台北', pairs: 12, seconds: 52),
-  Level(name: '逢甲夜市', city: '台中', pairs: 12, seconds: 50),
-  Level(name: '士林夜市', city: '台北', pairs: 12, seconds: 48),
+  Level(name: '南機場夜市', city: '台北', pairs: 1, seconds: 20),
+  Level(name: '城隍廟夜市', city: '新竹', pairs: 2, seconds: 25),
+  Level(name: '中壢觀光夜市', city: '桃園', pairs: 2, seconds: 20),
+  Level(name: '樂華夜市', city: '新北', pairs: 3, seconds: 30),
+  Level(name: '華西街夜市', city: '台北', pairs: 3, seconds: 25),
+  Level(name: '大東夜市', city: '台南', pairs: 3, seconds: 20),
+  Level(name: '文化路夜市', city: '嘉義', pairs: 4, seconds: 32),
+  Level(name: '東大門夜市', city: '花蓮', pairs: 4, seconds: 28),
+  Level(name: '一中街', city: '台中', pairs: 4, seconds: 24),
+  Level(name: '瑞豐夜市', city: '高雄', pairs: 5, seconds: 32),
+  Level(name: '寧夏夜市', city: '台北', pairs: 5, seconds: 27),
+  Level(name: '羅東夜市', city: '宜蘭', pairs: 6, seconds: 34),
+  Level(name: '基隆廟口夜市', city: '基隆', pairs: 6, seconds: 29),
+  Level(name: '花園夜市', city: '台南', pairs: 8, seconds: 40),
+  Level(name: '六合夜市', city: '高雄', pairs: 8, seconds: 35),
+  Level(name: '饒河街夜市', city: '台北', pairs: 10, seconds: 50),
+  Level(name: '逢甲夜市', city: '台中', pairs: 10, seconds: 46),
+  Level(name: '士林夜市', city: '台北', pairs: 10, seconds: 42),
 ];
