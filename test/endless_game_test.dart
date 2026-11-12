@@ -243,7 +243,7 @@ void main() {
       expect(g.revive(), isFalse);
     });
 
-    test('金幣：結束後才結算，每 20 分 1 枚，算盤和招財貓會加成', () {
+    test('金幣：結束後才結算，每 200 分 1 枚，算盤和招財貓會加成', () {
       final g = EndlessGame(random: Random(11), coinMultiplier: 1.2);
       g.useItem(ItemType.luckyCat);
       clearTable(g); // 100 + 200 + 清桌 500
@@ -251,7 +251,8 @@ void main() {
       expect(g.coinsEarned, 0);
       g.nextTable();
       while (!g.tick()) {}
-      expect(g.coinsEarned, (800 / 20 * 1.2 * 1.5).round());
+      expect(g.coinsEarned, (800 / 200 * 1.2 * 1.5).round());
+      expect(EndlessGame.scorePerCoin, 200, reason: '100000 分約換 500 枚');
     });
 
     test('沙漏可以超過時間上限', () {

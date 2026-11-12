@@ -42,8 +42,9 @@ class EndlessGame {
   /// 老闆提示後至少要再配對幾組才會再提示，避免故意亂翻拿答案。
   static const bossHintCooldownMatches = 3;
 
-  /// 每多少分換 1 枚金幣。比關卡（÷10）少一半，避免無盡模式被拿來刷金幣。
-  static const scorePerCoin = 20;
+  /// 每多少分換 1 枚金幣。大胃王以挑戰高分為主，金幣給得少（100000 分約 500 枚），
+  /// 想賺金幣主要靠夜市走透透。
+  static const scorePerCoin = 200;
 
   /// 第幾桌有幾張牌：第 1～2 桌 2×2、第 3～5 桌 3×2、第 6～9 桌 4×2、第 10 桌起 4×4。
   static int cardsForTable(int table) {
