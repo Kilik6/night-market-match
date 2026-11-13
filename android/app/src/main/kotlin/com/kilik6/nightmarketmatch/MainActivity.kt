@@ -1,4 +1,4 @@
-package com.kilik6.night_market_match
+package com.kilik6.nightmarketmatch
 
 import io.flutter.embedding.android.FlutterActivity
 
