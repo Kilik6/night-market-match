@@ -97,4 +97,17 @@ save("lose", mix(*[(t, note(f, 0.5 if i == 2 else 0.25, decay=5 if i == 2 else 9
 # 金幣：快速的兩個高音
 save("coin", mix((0, note(987.8, 0.08, decay=20)), (0.07, note(1318.5, 0.4, decay=8))), gain=0.6)
 
+# 記牌倒數：輕柔的木頭「叩」聲，每秒一下
+save("countdown", mix((0, note(1046.5, 0.12, decay=28, harmonics=((1, 1.0), (2.76, 0.3)))),
+                      (0, sweep(1800, 900, 0.02, decay=120, noise=0.6))), gain=0.45)
+
+# 剩 5 秒：輕輕的時鐘「滴、答」，每秒交替一聲
+def clock_tick(freq):
+    click = [0.25 * math.exp(-200 * i / SR) * (random.random() * 2 - 1) for i in range(int(SR * 0.02))]
+    return mix((0, note(freq, 0.06, decay=70, harmonics=((1, 1.0), (2.3, 0.4)))), (0, click))
+
+
+save("hurry", clock_tick(1200), gain=0.35)
+save("hurry_tock", clock_tick(950), gain=0.35)
+
 print("done")

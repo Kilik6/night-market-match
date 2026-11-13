@@ -3,7 +3,12 @@ import 'package:flutter/foundation.dart';
 
 /// 遊戲音效。檔案在 assets/sounds/，由 tools/make_sounds.py 合成；
 /// 背景音樂 bgm.wav 由 tools/make_music.py 合成。
-enum Sfx { flip, match, combo, miss, win, lose, coin }
+///
+/// [countdown] 是開局記牌時每秒的倒數聲；剩最後 [hurrySeconds] 秒時，每秒交替播 [hurry]（滴）和 [hurryTock]（答）。
+enum Sfx { flip, match, combo, miss, win, lose, coin, countdown, hurry, hurryTock }
+
+/// 剩幾秒開始播 [Sfx.hurry]。
+const hurrySeconds = 5;
 
 /// 畫面只依賴這個介面，測試時可以換成假的。
 abstract class SoundService {
@@ -93,7 +98,7 @@ class AudioSoundService implements SoundService {
     for (final sfx in Sfx.values) {
       try {
         _pools[sfx] = await AudioPool.createFromAsset(
-          path: 'sounds/${sfx.name}.wav',
+          path: 'sounds/${sfx == Sfx.hurryTock ? 'hurry_tock' : sfx.name}.wav',
           maxPlayers: sfx == Sfx.flip ? 4 : 2,
           playerMode: PlayerMode.lowLatency,
         );

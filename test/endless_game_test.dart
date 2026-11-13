@@ -332,6 +332,82 @@ void main() {
       expect(g.takeBossHint(), isNotNull, reason: '配了 3 組，冷卻結束');
     });
 
+    test('大胃王背包：清桌獎勵依倍率增加', () {
+      final g = EndlessGame(random: Random(20), clearBonusMultiplier: 1.2);
+      clearTable(g);
+      expect(g.lastClearBonus, 600);
+    });
+
+    test('老闆的人情：冷卻變短，最少 1 組', () {
+      final g = EndlessGame(random: Random(21), bossHintCooldown: 1);
+      while (g.table < 10) {
+        clearTable(g);
+        g.nextTable();
+      }
+      void miss() {
+        final (a, b) = anyMismatch(g);
+        g.pick(a);
+        g.pick(b);
+        g.hideMismatched();
+      }
+
+      miss();
+      miss();
+      expect(g.takeBossHint(), isNotNull);
+      matchAny(g); // 只配 1 組就過了冷卻
+      miss();
+      miss();
+      expect(g.takeBossHint(), isNotNull);
+      final zero = EndlessGame(random: Random(21), bossHintCooldown: 0);
+      for (final x in [zero]) {
+        while (x.table < 10) {
+          clearTable(x);
+          x.nextTable();
+        }
+        final (a, b) = anyMismatch(x);
+        x.pick(a);
+        x.pick(b);
+        x.hideMismatched();
+        final (c, d) = anyMismatch(x);
+        x.pick(c);
+        x.pick(d);
+        x.hideMismatched();
+        expect(x.takeBossHint(), isNotNull);
+        final (e, f) = anyMismatch(x);
+        x.pick(e);
+        x.pick(f);
+        x.hideMismatched();
+        final (h, k) = anyMismatch(x);
+        x.pick(h);
+        x.pick(k);
+        x.hideMismatched();
+        expect(x.takeBossHint(), isNull, reason: '冷卻最少 1 組，不會連續拿提示');
+      }
+    });
+
+    test('保溫便當袋：翻錯時連擊只少 1 段；Lv.2 每輪第一次翻錯不扣', () {
+      final g = EndlessGame(random: Random(22), comboKeepOnMiss: true, firstMissForgiven: true);
+      while (g.boardSize < 6) {
+        clearTable(g);
+        g.nextTable();
+      }
+      matchAny(g);
+      final combo = g.combo;
+      expect(combo, greaterThan(2));
+      void miss() {
+        final (a, b) = anyMismatch(g);
+        g.pick(a);
+        g.pick(b);
+        g.hideMismatched();
+      }
+
+      miss();
+      expect(g.combo, combo, reason: '第一次翻錯不扣');
+      miss();
+      expect(g.combo, combo - 1, reason: '之後只少 1 段');
+      expect(g.mistakes, 2, reason: '翻錯次數照算');
+    });
+
     test('老闆提示不會打亂之後的發牌（不用共用的亂數）', () {
       final a = EndlessGame(random: Random(19));
       final b = EndlessGame(random: Random(19));

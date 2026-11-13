@@ -20,8 +20,29 @@ class ShopScreen extends StatefulWidget {
     this.initialTab = 0,
   });
 
+  /// 「裝備」分頁的位置（時間到的「強化裝備再挑戰」直接打開這一頁）。
+  static const gearTab = 1;
+
   /// 「儲值」分頁的位置（首頁金幣旁的「＋」直接打開這一頁）。
   static const topUpTab = 3;
+
+  /// 道具依價格由便宜到貴排列。
+  static final sortedItems = [...ItemType.values]..sort((a, b) => a.price.compareTo(b.price));
+
+  /// 裝備依第一級的價格由便宜到貴排列；一樣的話，升滿總價便宜的在前。
+  /// 用固定的價格排序，升級後順序不會跳動。
+  static final sortedGear = [...GearType.values]..sort((a, b) {
+      final first = a.costs.first.compareTo(b.costs.first);
+      if (first != 0) return first;
+      int total(GearType t) => t.costs.fold(0, (sum, c) => sum + c);
+      return total(a).compareTo(total(b));
+    });
+
+  /// 卡背：能用金幣買的依價格由便宜到貴（免費的紅燈籠在最前面），只能靠成就取得的排在最後。
+  static final sortedSkins = [
+    ...cardSkins.where((s) => !s.achievementOnly).toList()..sort((a, b) => a.price.compareTo(b.price)),
+    ...cardSkins.where((s) => s.achievementOnly),
+  ];
 
   final ProgressStore store;
   final SoundService sounds;
@@ -230,10 +251,10 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
   Widget _itemsTab() {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
-      itemCount: ItemType.values.length,
+      itemCount: ShopScreen.sortedItems.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
-        final type = ItemType.values[i];
+        final type = ShopScreen.sortedItems[i];
         return _row(
           emoji: type.emoji,
           title: '${type.label}（持有 ${_store.itemCount(type)}）',
@@ -247,16 +268,16 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
   Widget _gearTab() {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
-      itemCount: GearType.values.length,
+      itemCount: ShopScreen.sortedGear.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
-        final type = GearType.values[i];
+        final type = ShopScreen.sortedGear[i];
         final level = _store.gearLevel(type);
         final cost = _store.upgradeCost(type);
         final next = cost == null ? '已達最高等級' : '下一級：${type.effect(level + 1)}';
         return _row(
           emoji: type.emoji,
-          title: '${type.label}  Lv.$level / ${type.maxLevel}',
+          title: '${type.label}${type.endlessOnly ? '（大胃王限定）' : ''}  Lv.$level / ${type.maxLevel}',
           subtitle: level == 0 ? next : '${type.effect(level)}\n$next',
           action: cost == null
               ? const Text('滿級', style: TextStyle(color: NightColors.jade, fontWeight: FontWeight.w700))
@@ -277,9 +298,9 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         crossAxisSpacing: 14,
         childAspectRatio: 0.62,
       ),
-      itemCount: cardSkins.length,
+      itemCount: ShopScreen.sortedSkins.length,
       itemBuilder: (context, i) {
-        final skin = cardSkins[i];
+        final skin = ShopScreen.sortedSkins[i];
         final isOwned = owned.contains(skin.id);
         final isEquipped = skin.id == equipped;
         final String label;
@@ -326,7 +347,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                 const SizedBox(height: 10),
                 Text(skin.name, style: const TextStyle(color: NightColors.paper, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text(
+                CoinText(
                   label,
                   style: TextStyle(
                     color: isEquipped ? NightColors.jade : NightColors.glow,

@@ -74,10 +74,14 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🛠️',
             title: '裝備',
             lines: [
-              '在商店用金幣升級，效果永久有效，兩種模式都適用。',
+              '在商店用金幣升級，效果永久有效；標示「大胃王限定」的只在夜市大胃王有效果。',
               '${GearType.hat.emoji} ${GearType.hat.label}：每升一級，每局時間 +${GearEffects.bonusSeconds(1)} 秒。',
               '${GearType.abacus.emoji} ${GearType.abacus.label}：每升一級，金幣 +${((GearEffects.coinMultiplier(1) - 1) * 100).round()}%。',
               '${GearType.cart.emoji} ${GearType.cart.label}：每升一級，連擊上限 +${GearEffects.comboCap(1) - GearEffects.comboCap(0)}。',
+              '${GearType.glasses.emoji} ${GearType.glasses.label}：每升一級，開局翻牌記憶時間 +${GearEffects.previewBonusSeconds(1)} 秒。',
+              '${GearType.lunchBag.emoji} ${GearType.lunchBag.label}：Lv.1 翻錯時連擊只少 1 段、不會歸零；Lv.2 每局第一次翻錯完全不扣。',
+              '${GearType.backpack.emoji} ${GearType.backpack.label}（大胃王限定）：每升一級，清桌獎勵 +${((GearEffects.clearBonusMultiplier(1) - 1) * 100).round()}%。',
+              '${GearType.favor.emoji} ${GearType.favor.label}（大胃王限定）：每升一級，老闆提示的冷卻少 ${GearEffects.bossHintCooldownCut(1)} 組。',
             ],
           ),
           const _Section(

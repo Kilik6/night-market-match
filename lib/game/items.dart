@@ -19,12 +19,19 @@ enum ItemType {
 enum GearType {
   hat('🧢', '老闆的帽子', [2000, 4000, 7000]),
   abacus('🧮', '算盤', [2000, 4000, 7000]),
-  cart('🛒', '攤車', [3000, 8000]);
+  cart('🛒', '攤車', [3000, 8000]),
+  glasses('👓', '老花眼鏡', [2500, 5000, 8000]),
+  lunchBag('🍱', '保溫便當袋', [3000, 9000]),
+  backpack('🎒', '大胃王背包', [2000, 4500, 8000], endlessOnly: true),
+  favor('🧧', '老闆的人情', [2500, 6000], endlessOnly: true);
 
-  const GearType(this.emoji, this.label, this.costs);
+  const GearType(this.emoji, this.label, this.costs, {this.endlessOnly = false});
 
   final String emoji;
   final String label;
+
+  /// 只在夜市大胃王有效果。
+  final bool endlessOnly;
 
   /// 每一級的升級費用，長度就是最高等級。
   final List<int> costs;
@@ -36,6 +43,10 @@ enum GearType {
         GearType.hat => '每局時間 +${level * 2} 秒',
         GearType.abacus => '過關金幣 +${level * 10}%',
         GearType.cart => '連擊上限 ×${5 + level}',
+        GearType.glasses => '開局翻牌記憶 +${GearEffects.previewBonusSeconds(level)} 秒',
+        GearType.lunchBag => level >= 2 ? '翻錯時連擊只少 1 段，每局第一次翻錯不扣' : '翻錯時連擊只少 1 段，不會歸零',
+        GearType.backpack => '大胃王清桌獎勵 +${level * 10}%',
+        GearType.favor => '大胃王老闆提示的冷卻少 ${GearEffects.bossHintCooldownCut(level)} 組',
       };
 }
 
@@ -44,4 +55,19 @@ abstract final class GearEffects {
   static int bonusSeconds(int hatLevel) => hatLevel * 2;
   static double coinMultiplier(int abacusLevel) => 1 + abacusLevel * 0.1;
   static int comboCap(int cartLevel) => 5 + cartLevel;
+
+  /// 老花眼鏡：開局翻牌記憶多幾秒。
+  static int previewBonusSeconds(int glassesLevel) => glassesLevel;
+
+  /// 保溫便當袋 Lv.1 起：翻錯時連擊只少 1 段，不會歸零。
+  static bool comboKeepOnMiss(int lunchBagLevel) => lunchBagLevel >= 1;
+
+  /// 保溫便當袋 Lv.2：每局第一次翻錯完全不扣連擊。
+  static bool firstMissForgiven(int lunchBagLevel) => lunchBagLevel >= 2;
+
+  /// 大胃王背包：清桌獎勵倍率。
+  static double clearBonusMultiplier(int backpackLevel) => 1 + backpackLevel * 0.1;
+
+  /// 老闆的人情：老闆提示的冷卻少幾組。
+  static int bossHintCooldownCut(int favorLevel) => favorLevel;
 }

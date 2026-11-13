@@ -12,6 +12,8 @@ class MatchingGame {
     this.bonusSeconds = 0,
     this.comboCap = defaultComboCap,
     this.coinMultiplier = 1,
+    this.comboKeepOnMiss = false,
+    this.firstMissForgiven = false,
   })  : _pool = pool,
         _random = random ?? Random() {
     reset();
@@ -33,6 +35,15 @@ class MatchingGame {
 
   /// 裝備「算盤」的金幣倍率。
   final double coinMultiplier;
+
+  /// 裝備「保溫便當袋」：翻錯時連擊只少 1 段，不會歸零。
+  final bool comboKeepOnMiss;
+
+  /// 裝備「保溫便當袋」Lv.2：每局第一次翻錯不扣連擊。
+  final bool firstMissForgiven;
+
+  /// 這一局已經用掉「第一次翻錯不扣」了。
+  bool firstMissUsed = false;
 
   final List<Food> _pool;
   final Random _random;
@@ -133,6 +144,7 @@ class MatchingGame {
     usedItems = {};
     charmActive = false;
     luckyCatActive = false;
+    firstMissUsed = false;
     lastMatched = null;
     lastMatchedCards = const [];
     lastPoints = 0;
@@ -159,6 +171,10 @@ class MatchingGame {
     mistakes++;
     if (charmActive) {
       charmActive = false; // 護身符擋下這次翻錯，連擊不中斷
+    } else if (firstMissForgiven && !firstMissUsed) {
+      firstMissUsed = true; // 保溫便當袋 Lv.2：每局第一次翻錯不扣連擊
+    } else if (comboKeepOnMiss) {
+      combo = max(1, combo - 1); // 保溫便當袋：連擊只少 1 段
     } else {
       combo = 1;
     }

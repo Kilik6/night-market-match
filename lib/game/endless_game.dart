@@ -17,6 +17,10 @@ class EndlessGame {
     this.bonusSeconds = 0,
     this.comboCap = MatchingGame.defaultComboCap,
     this.coinMultiplier = 1,
+    this.comboKeepOnMiss = false,
+    this.firstMissForgiven = false,
+    this.clearBonusMultiplier = 1,
+    this.bossHintCooldown = bossHintCooldownMatches,
   })  : assert(pool.length >= maxCards ~/ 2, '小吃種類至少要 ${maxCards ~/ 2} 種'),
         _pool = pool,
         _random = random ?? Random() {
@@ -78,6 +82,21 @@ class EndlessGame {
 
   /// 裝備「算盤」的金幣倍率。
   final double coinMultiplier;
+
+  /// 裝備「保溫便當袋」：翻錯時連擊只少 1 段，不會歸零。
+  final bool comboKeepOnMiss;
+
+  /// 裝備「保溫便當袋」Lv.2：每局第一次翻錯不扣連擊。
+  final bool firstMissForgiven;
+
+  /// 這一局已經用掉「第一次翻錯不扣」了。
+  bool firstMissUsed = false;
+
+  /// 裝備「大胃王背包」：清桌獎勵倍率。
+  final double clearBonusMultiplier;
+
+  /// 老闆提示的冷卻組數（裝備「老闆的人情」會減少），至少 1 組。
+  final int bossHintCooldown;
 
   final List<Food> _pool;
   final Random _random;
@@ -177,7 +196,7 @@ class EndlessGame {
     table = 1;
     _dealTable();
     consecutiveMisses = 0;
-    matchesSinceBossHint = bossHintCooldownMatches; // 第一次不用等冷卻
+    matchesSinceBossHint = bossHintCooldown; // 第一次不用等冷卻
     steps = 0;
     score = 0;
     combo = 1;
@@ -193,6 +212,7 @@ class EndlessGame {
     usedItems = {};
     charmActive = false;
     luckyCatActive = false;
+    firstMissUsed = false;
     lastMatched = null;
     lastMatchedCards = const [];
     lastPoints = 0;
@@ -242,6 +262,10 @@ class EndlessGame {
     consecutiveMisses++;
     if (charmActive) {
       charmActive = false; // 護身符擋下這次翻錯，連擊不中斷
+    } else if (firstMissForgiven && !firstMissUsed) {
+      firstMissUsed = true; // 保溫便當袋 Lv.2：每局第一次翻錯不扣連擊
+    } else if (comboKeepOnMiss) {
+      combo = max(1, combo - 1); // 保溫便當袋：連擊只少 1 段
     } else {
       combo = 1;
     }
@@ -272,7 +296,7 @@ class EndlessGame {
     if (pairsLeft > 0) return PickResult.matched;
     tableCleared = true;
     tablesCleared++;
-    lastClearBonus = clearBonusFor(table);
+    lastClearBonus = (clearBonusFor(table) * clearBonusMultiplier).round();
     score += lastClearBonus;
     _addTime(clearBonusSeconds);
     return PickResult.finished;
@@ -338,7 +362,7 @@ class EndlessGame {
   /// 回傳那兩張牌的位置；不符合條件回傳 null。
   List<int>? takeBossHint() {
     if (isEnded || isLocked) return null;
-    if (consecutiveMisses < bossHintAfterMisses || matchesSinceBossHint < bossHintCooldownMatches) return null;
+    if (consecutiveMisses < bossHintAfterMisses || matchesSinceBossHint < max(1, bossHintCooldown)) return null;
     final pairs = <List<int>>[];
     for (var a = 0; a < boardSize; a++) {
       if (isMatched[a] || isOpen[a]) continue;

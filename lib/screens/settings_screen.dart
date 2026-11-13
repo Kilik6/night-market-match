@@ -5,8 +5,9 @@ import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/night_scaffold.dart';
+import 'licenses_screen.dart';
 
-/// 設定：背景音樂、音效、恢復購買、重置進度、版本。
+/// 設定：背景音樂、音效、恢復購買、重置進度、版本、開源授權。
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.store, required this.sounds, required this.purchases});
 
@@ -147,6 +148,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               leading: Icon(Icons.info_outline_rounded, color: NightColors.mist),
               title: Text('版本', style: labelStyle),
               trailing: Text(appVersion, style: TextStyle(color: NightColors.mist)),
+            ),
+            ListTile(
+              key: const ValueKey('licenses'),
+              leading: const Icon(Icons.description_outlined, color: NightColors.mist),
+              title: const Text('開源授權', style: labelStyle),
+              trailing: const Icon(Icons.chevron_right_rounded, color: NightColors.mist),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LicensesScreen())),
             ),
           ]),
         ],

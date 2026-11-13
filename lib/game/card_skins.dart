@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// 卡背造型：用金幣在商店解鎖。價格當長期目標：兩種模式每分鐘約賺 400～800 枚，全部約 21,000 枚。
+/// 卡背的底紋。紅燈籠維持單色（[plain]），其他每款各有一種呼應主題的花紋。
+enum CardPattern { plain, lattice, stars, mahjong, poke, waves, confetti, rings, checker, map, rays, chevron, pinstripe, sparkle }
+
+/// 卡背造型：用金幣在商店解鎖，部分只能靠成就取得。
 class CardSkin {
   const CardSkin({
     required this.id,
@@ -12,6 +15,7 @@ class CardSkin {
     required this.markColor,
     this.achievementOnly = false,
     this.markScale = 1,
+    this.pattern = CardPattern.plain,
   });
 
   /// 存檔用的識別碼，上架後不要改。
@@ -30,6 +34,9 @@ class CardSkin {
 
   /// 卡背圖案的放大倍率。emoji 圖案四周有留白，看起來比文字小，要放大一點。
   final double markScale;
+
+  /// 底紋。不是 [CardPattern.plain] 的卡背，中間的圖案會放在一個圓形徽章裡，花紋再花也看得清楚。
+  final CardPattern pattern;
 }
 
 const defaultSkinId = 'lantern';
@@ -55,6 +62,7 @@ const cardSkins = <CardSkin>[
     edge: Color(0xFFF5CB5C),
     mark: '福',
     markColor: Color(0xFF8A1C12),
+    pattern: CardPattern.lattice,
   ),
   CardSkin(
     id: 'starry',
@@ -64,26 +72,72 @@ const cardSkins = <CardSkin>[
     edge: Color(0xFF4F6DB3),
     mark: '★',
     markColor: Color(0xFFFFD873),
+    pattern: CardPattern.stars,
   ),
   CardSkin(
-    id: 'jade',
-    name: '青草茶',
+    id: 'mahjong',
+    name: '摸麻將',
     price: 6000,
-    base: Color(0xFF2E7D5B),
-    edge: Color(0xFF52A882),
-    mark: '🍵',
-    markColor: Color(0xFFE9F7EF),
-    markScale: emojiMarkScale,
+    base: Color(0xFF1F6B4A),
+    edge: Color(0xFFE8D9B5),
+    mark: '發',
+    markColor: Color(0xFF1E7B3C),
+    pattern: CardPattern.mahjong,
   ),
   CardSkin(
-    id: 'boba',
-    name: '珍奶控',
+    id: 'pokepoke',
+    name: '戳戳樂',
     price: 9000,
-    base: Color(0xFF7A4A2E),
-    edge: Color(0xFFA9714B),
-    mark: '🧋',
+    base: Color(0xFFF2B83A),
+    edge: Color(0xFFE84A5F),
+    mark: '🎁',
     markColor: Color(0xFFFBF1DC),
     markScale: emojiMarkScale,
+    pattern: CardPattern.poke,
+  ),
+  CardSkin(
+    id: 'goldfish',
+    name: '撈金魚',
+    price: 3000,
+    base: Color(0xFF1E6FA8),
+    edge: Color(0xFF5FB8E8),
+    mark: '🐠',
+    markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
+    pattern: CardPattern.waves,
+  ),
+  CardSkin(
+    id: 'balloon',
+    name: '射氣球',
+    price: 5000,
+    base: Color(0xFFC23B6A),
+    edge: Color(0xFFF08AAE),
+    mark: '🎈',
+    markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
+    pattern: CardPattern.confetti,
+  ),
+  CardSkin(
+    id: 'ringtoss',
+    name: '套圈圈',
+    price: 7000,
+    base: Color(0xFF2F7F48),
+    edge: Color(0xFF5CC47E),
+    mark: '🎯',
+    markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
+    pattern: CardPattern.rings,
+  ),
+  CardSkin(
+    id: 'lantern_fest',
+    name: '夜市燈會',
+    price: 12000,
+    base: Color(0xFF6E1010),
+    edge: Color(0xFFFFB547),
+    mark: '🏮',
+    markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
+    pattern: CardPattern.checker,
   ),
   CardSkin(
     id: 'tour',
@@ -95,6 +149,7 @@ const cardSkins = <CardSkin>[
     markColor: Color(0xFFFBF1DC),
     markScale: emojiMarkScale,
     achievementOnly: true,
+    pattern: CardPattern.map,
   ),
   CardSkin(
     id: 'god',
@@ -105,6 +160,7 @@ const cardSkins = <CardSkin>[
     mark: '神',
     markColor: Color(0xFFFFB547),
     achievementOnly: true,
+    pattern: CardPattern.rays,
   ),
   CardSkin(
     id: 'gourmet',
@@ -115,6 +171,31 @@ const cardSkins = <CardSkin>[
     mark: '饕',
     markColor: Color(0xFFFBF1DC),
     achievementOnly: true,
+    pattern: CardPattern.chevron,
+  ),
+  CardSkin(
+    id: 'foodking',
+    name: '小吃王',
+    price: 0,
+    base: Color(0xFF4A2A6B),
+    edge: Color(0xFFFFD43B),
+    mark: '👑',
+    markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
+    achievementOnly: true,
+    pattern: CardPattern.pinstripe,
+  ),
+  CardSkin(
+    id: 'eagle_eye',
+    name: '火眼金睛',
+    price: 0,
+    base: Color(0xFFF4A46A),
+    edge: Color(0xFFFFF1D6),
+    mark: '🦉',
+    markColor: Color(0xFFFBF1DC),
+    markScale: emojiMarkScale,
+    achievementOnly: true,
+    pattern: CardPattern.sparkle,
   ),
 ];
 

@@ -6,17 +6,20 @@ import 'package:flutter/material.dart';
 import '../game/achievements.dart';
 import '../game/card_skins.dart';
 import '../game/endless_game.dart';
+import '../game/gear_advice.dart';
 import '../game/items.dart';
 import '../game/matching_game.dart' show PickResult;
 import '../game/night_market_data.dart';
 import '../services/ad_service.dart';
 import '../services/progress_store.dart';
+import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/card_widget.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/match_effects.dart';
 import '../widgets/night_scaffold.dart';
+import 'shop_screen.dart';
 
 /// 「夜市大胃王」無盡模式：配對成功的牌消掉後發新牌，一直吃到時間用完，挑戰最高分。
 class EndlessScreen extends StatefulWidget {
@@ -27,10 +30,14 @@ class EndlessScreen extends StatefulWidget {
     required this.sounds,
     this.random,
     this.previewSeconds = previewMemorizeSeconds,
+    this.purchases,
   });
 
   /// 開局翻開全部牌讓玩家記位置的秒數，0 表示不翻。
   final int previewSeconds;
+
+  /// 商店付款（「強化裝備」打開的商店會用到）。沒給就用開發測試用的假商店。
+  final PurchaseService? purchases;
 
   static const title = '夜市大胃王';
 
@@ -206,6 +213,10 @@ class _EndlessScreenState extends State<EndlessScreen> {
       bonusSeconds: GearEffects.bonusSeconds(_store.gearLevel(GearType.hat)),
       comboCap: GearEffects.comboCap(_store.gearLevel(GearType.cart)),
       coinMultiplier: GearEffects.coinMultiplier(_store.gearLevel(GearType.abacus)),
+      comboKeepOnMiss: GearEffects.comboKeepOnMiss(_store.gearLevel(GearType.lunchBag)),
+      firstMissForgiven: GearEffects.firstMissForgiven(_store.gearLevel(GearType.lunchBag)),
+      clearBonusMultiplier: GearEffects.clearBonusMultiplier(_store.gearLevel(GearType.backpack)),
+      bossHintCooldown: EndlessGame.bossHintCooldownMatches - GearEffects.bossHintCooldownCut(_store.gearLevel(GearType.favor)),
     );
     _showClear = false;
     _bestAtStart = _store.endlessBest;
@@ -219,7 +230,8 @@ class _EndlessScreenState extends State<EndlessScreen> {
   /// 第一桌結束後才開始計時；之後的桌計時器已經在跑，翻牌期間 [EndlessGame.tick] 不會倒數。
   void _startPreview(int seconds, {required bool startClockAfter}) {
     _previewTimer?.cancel();
-    _previewLeft = seconds;
+    // 老花眼鏡：每一桌翻牌記憶多幾秒（關掉翻牌時不加）
+    _previewLeft = seconds > 0 ? seconds + GearEffects.previewBonusSeconds(_store.gearLevel(GearType.glasses)) : 0;
     if (_previewLeft <= 0) {
       if (startClockAfter) _startClock();
       return;
@@ -227,10 +239,14 @@ class _EndlessScreenState extends State<EndlessScreen> {
     // 牌全部翻開，牌桌中央的提示框倒數
     _game.startPreview();
     _message = '倒數結束就會蓋牌';
+    _sounds.play(Sfx.countdown);
     _previewTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || _paused) return; // 問要不要離開時先停住
       setState(() => _previewLeft--);
-      if (_previewLeft > 0) return;
+      if (_previewLeft > 0) {
+        _sounds.play(Sfx.countdown);
+        return;
+      }
       timer.cancel();
       setState(() {
         _game.endPreview();
@@ -247,8 +263,13 @@ class _EndlessScreenState extends State<EndlessScreen> {
 
   void _onTick() {
     if (!mounted || _paused) return;
+    final before = _game.timeLeft;
     final timeUp = _game.tick();
     setState(() {});
+    // 最後幾秒像時鐘一樣「滴、答」提醒（翻牌記憶、清桌時計時暫停，不響）
+    if (!timeUp && _game.timeLeft < before && _game.timeLeft <= hurrySeconds) {
+      _sounds.play(_game.timeLeft.isOdd ? Sfx.hurry : Sfx.hurryTock);
+    }
     if (timeUp) {
       _clock?.cancel();
       _hideTimer?.cancel();
@@ -537,6 +558,18 @@ class _EndlessScreenState extends State<EndlessScreen> {
     });
   }
 
+  /// 「強化裝備再挑戰」：打開商店的裝備分頁，關掉後回到這裡。
+  Future<void> _openGearShop() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ShopScreen(
+        store: _store,
+        sounds: _sounds,
+        purchases: widget.purchases ?? DevPurchaseService(),
+        initialTab: ShopScreen.gearTab,
+      ),
+    ));
+  }
+
   /// 時間到：先存最高分（看廣告續命後分數只會更高），再問要續命、再一輪還是離開。
   Future<void> _showEndDialog() async {
     await _store.recordEndlessScore(_game.score, matches: _game.matches);
@@ -548,6 +581,15 @@ class _EndlessScreenState extends State<EndlessScreen> {
     final newAchievements = achievements.where((a) => _store.isAchieved(a) && !_achievedAtStart.contains(a.id));
     final isRecord = _game.score > _bestAtStart;
     final coins = _game.coinsEarned;
+    // 依這一輪的情況建議升級哪一件裝備；全部升滿就不顯示「強化裝備」
+    final advice = adviseGear(
+      levelOf: _store.gearLevel,
+      coins: _store.coins + coins, // 這一輪的金幣會先發，可以拿來升級
+      endless: true,
+      bestCombo: _game.bestCombo,
+      comboCap: _game.comboCap,
+      mistakes: _game.mistakes,
+    );
     final choice = await showDialog<ResultChoice>(
       context: context,
       barrierDismissible: false,
@@ -564,6 +606,8 @@ class _EndlessScreenState extends State<EndlessScreen> {
         primaryLabel: '再吃一輪',
         leaveLabel: '回到首頁',
         emphasizeAd: true,
+        upgradeLabel: advice == null ? null : '強化裝備再挑戰',
+        upgradeHint: advice?.message,
       ),
     );
     if (!mounted) return;
@@ -587,6 +631,11 @@ class _EndlessScreenState extends State<EndlessScreen> {
     if (choice == ResultChoice.leave) {
       _leave();
       return;
+    }
+    if (choice == ResultChoice.upgrade) {
+      // 金幣已經發了，打開裝備分頁升級，回來後用新裝備再吃一輪
+      await _openGearShop();
+      if (!mounted) return;
     }
     setState(_startRound);
   }

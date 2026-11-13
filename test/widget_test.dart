@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_market_match/game/achievements.dart';
 import 'package:night_market_match/game/card_skins.dart';
 import 'package:night_market_match/game/endless_game.dart';
+import 'package:night_market_match/game/gear_advice.dart';
 import 'package:night_market_match/game/items.dart';
 import 'package:night_market_match/game/matching_game.dart';
 import 'package:night_market_match/game/night_market_data.dart';
@@ -239,6 +241,26 @@ void main() {
   });
 
   group('道具與裝備', () {
+    test('保溫便當袋：走透透翻錯時連擊只少 1 段，最低 1', () {
+      final g = MatchingGame(level: testLevels[0], random: Random(1), comboKeepOnMiss: true);
+      for (var i = 0; i < 3; i++) {
+        final a = List.generate(g.cards.length, (k) => k).firstWhere((k) => !g.isMatched[k]);
+        g.pick(a);
+        g.pick(pairOf(g, a));
+      }
+      expect(g.combo, 4);
+      final x = List.generate(g.cards.length, (k) => k).firstWhere((k) => !g.isMatched[k]);
+      g.pick(x);
+      g.pick(List.generate(g.cards.length, (k) => k).firstWhere((k) => !g.isMatched[k] && g.cards[k] != g.cards[x]));
+      expect(g.combo, 3);
+      g.hideMismatched();
+      final plain = MatchingGame(level: testLevels[0], random: Random(1), comboKeepOnMiss: true);
+      final y = 0;
+      plain.pick(y);
+      plain.pick(differentFrom(plain, y));
+      expect(plain.combo, 1, reason: '連擊最低 1');
+    });
+
     MatchingGame newGame({int level = 0, int bonus = 0, int cap = 5, double multiplier = 1}) => MatchingGame(
           level: testLevels[level],
           random: Random(1),
@@ -370,6 +392,49 @@ void main() {
         // 牌更多，或牌一樣多但時間更少
         expect(cur.pairs > prev.pairs || cur.seconds < prev.seconds, isTrue, reason: cur.name);
       }
+    });
+
+    test('新卡背：夜市遊戲攤四款可以買，小吃王和火眼金睛只能靠成就', () {
+      expect({for (final id in ['goldfish', 'balloon', 'ringtoss', 'lantern_fest']) id: skinById(id).price},
+          {'goldfish': 3000, 'balloon': 5000, 'ringtoss': 7000, 'lantern_fest': 12000});
+      for (final id in ['foodking', 'eagle_eye']) {
+        expect(skinById(id).id, id);
+        expect(skinById(id).achievementOnly, isTrue);
+      }
+      expect(achievements.firstWhere((a) => a.id == 'foods20').skinId, 'foodking');
+      final perfect10 = achievements.firstWhere((a) => a.id == 'perfect10');
+      expect(perfect10.skinId, 'eagle_eye');
+      expect(perfect10.target, 10);
+    });
+
+    test('卡背：紅燈籠維持單色，其他都有花紋；摸麻將、戳戳樂取代青草茶、珍奶控；火眼金睛是貓頭鷹', () {
+      expect(skinById(defaultSkinId).pattern, CardPattern.plain);
+      expect(cardSkins.where((s) => s.id != defaultSkinId).every((s) => s.pattern != CardPattern.plain), isTrue);
+      expect(cardSkins.map((s) => s.id), isNot(contains('jade')));
+      expect(cardSkins.map((s) => s.id), isNot(contains('boba')));
+      final mahjong = skinById('mahjong');
+      expect((mahjong.name, mahjong.price, mahjong.mark, mahjong.pattern), ('摸麻將', 6000, '發', CardPattern.mahjong));
+      final poke = skinById('pokepoke');
+      expect((poke.name, poke.price, poke.pattern), ('戳戳樂', 9000, CardPattern.poke));
+      expect(skinById('eagle_eye').mark, '🦉');
+      expect(cardSkins.length, 14);
+    });
+
+    test('商店排列：道具、裝備、卡背都依價格由便宜到貴，成就卡背排最後', () {
+      expect(ShopScreen.sortedItems.map((t) => t.price), [200, 250, 300, 600]);
+      expect(ShopScreen.sortedGear.map((t) => t.name),
+          ['hat', 'abacus', 'backpack', 'favor', 'glasses', 'cart', 'lunchBag']);
+      final paid = ShopScreen.sortedSkins.where((s) => !s.achievementOnly).map((s) => s.price).toList();
+      expect(paid, [...paid]..sort());
+      expect(ShopScreen.sortedSkins.first.id, defaultSkinId);
+      expect(ShopScreen.sortedSkins.skipWhile((s) => !s.achievementOnly).every((s) => s.achievementOnly), isTrue);
+      expect(ShopScreen.sortedSkins.length, cardSkins.length);
+    });
+
+    test('裝備：7 件，大胃王限定的有標示', () {
+      expect(GearType.values.map((g) => g.name),
+          ['hat', 'abacus', 'cart', 'glasses', 'lunchBag', 'backpack', 'favor']);
+      expect(GearType.values.where((g) => g.endlessOnly), {GearType.backpack, GearType.favor});
     });
 
     test('卡背 id 不重複，預設卡背免費', () {
@@ -926,7 +991,7 @@ void main() {
     });
 
     testWidgets('卡背：emoji 圖案放大，各種大小都不會超出卡背', (tester) async {
-      for (final id in ['boba', 'jade', 'tour']) {
+      for (final id in ['pokepoke', 'goldfish', 'tour']) {
         expect(skinById(id).markScale, greaterThan(1), reason: '$id 的圖案要放大');
       }
       expect(skinById('fortune').markScale, 1, reason: '文字卡背維持原本大小');
@@ -943,8 +1008,8 @@ void main() {
         }
       }
       // emoji 卡背的字級比文字卡背大
-      await tester.pumpWidget(MaterialApp(home: CardBack(skin: skinById('boba'), width: 100)));
-      final boba = tester.widget<Text>(find.text('🧋')).style!.fontSize!;
+      await tester.pumpWidget(MaterialApp(home: CardBack(skin: skinById('pokepoke'), width: 100)));
+      final boba = tester.widget<Text>(find.text('🎁')).style!.fontSize!;
       await tester.pumpWidget(MaterialApp(home: CardBack(skin: skinById('fortune'), width: 100)));
       final fortune = tester.widget<Text>(find.text('福')).style!.fontSize!;
       expect(boba, greaterThan(fortune));
@@ -1145,11 +1210,16 @@ void main() {
           findsOneWidget);
       expect(find.textContaining('金幣是分數 ÷ 200'), findsOneWidget);
       expect(find.textContaining('連續翻錯 2 次，老闆會偷偷亮出一組對子'), findsOneWidget);
-      await tester.scrollUntilVisible(find.byKey(const ValueKey('howto_more')), 300);
+      // 說明很長，清單是捲到才建立的，所以一段一段捲過去檢查
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('howto_items')), 300);
       for (final type in ItemType.values) {
-        expect(find.text('${type.emoji} ${type.label}：${type.description}'), findsOneWidget, reason: type.name);
+        await tester.scrollUntilVisible(find.text('${type.emoji} ${type.label}：${type.description}'), 100);
       }
-      expect(find.textContaining('每升一級，每局時間 +2 秒'), findsOneWidget);
+      await tester.scrollUntilVisible(find.textContaining('每升一級，每局時間 +2 秒'), 100);
+      for (final gear in GearType.values) {
+        await tester.scrollUntilVisible(find.textContaining('${gear.emoji} ${gear.label}'), 100);
+      }
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('howto_more')), 300);
       expect(tester.takeException(), isNull);
     });
 
@@ -1911,6 +1981,32 @@ void main() {
       expect(tester.widget<ItemTile>(find.byKey(const ValueKey('peek'))).onTap, isNotNull, reason: '偷看還能用');
     });
 
+    testWidgets('音效：記牌時每秒「叩」一聲，最後 $hurrySeconds 秒時鐘「滴、答」交替', (tester) async {
+      await pumpLevel(tester);
+      int count(Sfx sfx) => sounds.played.where((s) => s == sfx).length;
+      expect(count(Sfx.countdown), 1, reason: '一開局顯示 5 就叩一聲');
+      for (var n = 2; n <= seconds; n++) {
+        await tester.pump(const Duration(seconds: 1));
+        expect(count(Sfx.countdown), n);
+      }
+      await tester.pump(const Duration(seconds: 1)); // 蓋牌，不再叩
+      expect(count(Sfx.countdown), seconds);
+      List<Sfx> ticks() => sounds.played.where((s) => s == Sfx.hurry || s == Sfx.hurryTock).toList();
+      expect(ticks(), isEmpty);
+
+      // 60 秒倒數到剩 6 秒都不響；剩 5、4、3、2、1 滴答交替，時間到改播結束音效
+      await tester.pump(const Duration(seconds: 54));
+      expect(timeText(tester), '6');
+      expect(ticks(), isEmpty);
+      await tester.pump(const Duration(seconds: hurrySeconds));
+      expect(ticks(), [Sfx.hurry, Sfx.hurryTock, Sfx.hurry, Sfx.hurryTock, Sfx.hurry]);
+      await tester.pump(const Duration(seconds: 1));
+      expect(ticks().length, hurrySeconds);
+      expect(sounds.played.last, Sfx.lose);
+      expect(count(Sfx.countdown), seconds, reason: '倒數音效只在記牌時播');
+      await tester.pump(const Duration(seconds: 1));
+    });
+
     testWidgets('提示框在牌桌正中央、半透明，牌不會移位', (tester) async {
       await setUpStore(tester, const {});
       await tester.pumpWidget(MaterialApp(
@@ -2028,6 +2124,18 @@ void main() {
       expect(int.parse(timeText(tester)), lessThan(int.parse(time)), reason: '蓋牌後繼續計時');
     });
 
+    testWidgets('老花眼鏡：開局翻牌記憶的倒數變長', (tester) async {
+      await setUpStore(tester, const {'gear_glasses': 2});
+      await tester.pumpWidget(MaterialApp(
+        home: GameScreen(levelIndex: 0, store: store, ads: ads, sounds: sounds, random: Random(1), levelList: testLevels),
+      ));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(countdown(tester), '${seconds + 2}');
+      await tester.pump(const Duration(seconds: seconds + 2));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(hint, findsNothing);
+    });
+
     testWidgets('提示框在小螢幕上不會跑版', (tester) async {
       await setUpStore(tester, const {});
       tester.view.physicalSize = const Size(640, 1136);
@@ -2114,6 +2222,23 @@ void main() {
       expect(find.textContaining('仍然可以自己選擇看廣告領獎勵'), findsOneWidget);
     });
 
+    testWidgets('設定：開源授權列出套件，點進去看授權全文', (tester) async {
+      LicenseRegistry.addLicense(() => Stream.fromIterable([
+            const LicenseEntryWithLineBreaks(['audioplayers'], 'MIT License\n\nCopyright (c) 2017 Blue Fire'),
+          ]));
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+          home: SettingsScreen(store: store, sounds: sounds, purchases: DevPurchaseService(enabled: true))));
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('licenses')), 100);
+      await tester.tap(find.byKey(const ValueKey('licenses')));
+      await tester.pumpAndSettle();
+      expect(find.text('開源授權'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('license_audioplayers')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Copyright (c) 2017 Blue Fire'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('恢復購買：商店和設定頁都能拿回移除廣告', (tester) async {
       final purchases = DevPurchaseService(enabled: true);
       await purchases.buy(removeAdsProductId); // 之前在別支手機買過
@@ -2166,6 +2291,16 @@ void main() {
       expect(find.byKey(const ValueKey('remove_ads_card')), findsOneWidget);
     });
 
+    testWidgets('卡背分頁的價格用黃色金幣圖示，不是 🪙 表情符號', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: ShopScreen(store: store, sounds: sounds, purchases: DevPurchaseService(enabled: true), initialTab: 2),
+      ));
+      await tester.pump();
+      expect(findCoinText('🪙 ${skinById('fortune').price}'), findsOneWidget);
+      expect(find.text('🪙 ${skinById('fortune').price}'), findsNothing);
+    });
+
     testWidgets('儲值分頁在小螢幕不會跑版', (tester) async {
       await pumpShop(tester);
       tester.view.physicalSize = const Size(640, 1136);
@@ -2174,6 +2309,156 @@ void main() {
       expect(tester.takeException(), isNull);
       await scrollToRestore(tester);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('強化裝備', () {
+    int none(GearType _) => 0;
+
+    test('建議：走透透只差 1～2 組就建議帽子，寫出差幾組和多幾秒', () {
+      final advice = adviseGear(levelOf: none, coins: 0, endless: false, pairsLeft: 2, bestCombo: 2)!;
+      expect(advice.type, GearType.hat);
+      expect(advice.nextLevel, 1);
+      expect(advice.cost, GearType.hat.costs[0]);
+      expect(advice.message, startsWith('只差 2 組就收攤了！'));
+      expect(advice.message, contains('老闆的帽子升到 Lv.1，每局時間 +2 秒'));
+      expect(advice.message, isNot(contains('現在就升得起')));
+    });
+
+    test('建議：連擊衝到上限就建議攤車', () {
+      final advice = adviseGear(levelOf: none, coins: 0, endless: true, bestCombo: 5, comboCap: 5)!;
+      expect(advice.type, GearType.cart);
+      expect(advice.message, contains('連擊已經衝到上限 ×5！'));
+      expect(advice.message, contains('連擊上限提高到 ×6'));
+    });
+
+    test('建議：照模式的預設順序，跳過已經升滿的；全部升滿就不建議', () {
+      List<GearType> sequence({required bool endless}) {
+        final maxed = <GearType>{};
+        final out = <GearType>[];
+        while (true) {
+          final a = adviseGear(levelOf: (t) => maxed.contains(t) ? t.maxLevel : 0, coins: 0, endless: endless);
+          if (a == null) return out;
+          out.add(a.type);
+          maxed.add(a.type);
+        }
+      }
+
+      expect(sequence(endless: true), [
+        GearType.hat,
+        GearType.backpack,
+        GearType.cart,
+        GearType.glasses,
+        GearType.lunchBag,
+        GearType.favor,
+        GearType.abacus,
+      ]);
+      // 走透透不會建議大胃王限定的裝備
+      expect(sequence(endless: false),
+          [GearType.hat, GearType.glasses, GearType.cart, GearType.lunchBag, GearType.abacus]);
+      final abacus = adviseGear(
+          levelOf: (t) => t == GearType.abacus ? 1 : t.maxLevel, coins: 0, endless: true)!;
+      expect(abacus.nextLevel, 2);
+      expect(abacus.message, contains('金幣再 +10%'));
+    });
+
+    test('建議：翻錯很多次就建議老花眼鏡，眼鏡滿了再建議便當袋', () {
+      final glasses = adviseGear(levelOf: (_) => 0, coins: 0, endless: false, mistakes: 4)!;
+      expect(glasses.type, GearType.glasses);
+      expect(glasses.message, startsWith('這一局翻錯了 4 次！'));
+      expect(glasses.message, contains('開局翻牌記憶多 1 秒'));
+      final bag = adviseGear(
+          levelOf: (t) => t == GearType.glasses ? t.maxLevel : 0, coins: 0, endless: true, mistakes: 3)!;
+      expect(bag.type, GearType.lunchBag);
+      expect(bag.message, contains('翻錯時連擊只少 1 段'));
+    });
+
+    test('建議：大胃王的帽子寫每一輪；金幣夠的時候提示現在就升得起', () {
+      final advice = adviseGear(levelOf: none, coins: GearType.hat.costs[0], endless: true)!;
+      expect(advice.message, contains('每一輪時間 +2 秒，能多吃幾桌'));
+      expect(advice.message, contains('現在就升得起'));
+    });
+
+    testWidgets('走透透時間到：顯示建議，強化裝備打開裝備分頁，升級後回來重新挑戰', (tester) async {
+      await pumpGame(tester, saved: {'coins': GearType.hat.costs[0]});
+      await tester.pump(const Duration(seconds: 60));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('時間到了'), findsOneWidget);
+      expect(find.byKey(const ValueKey('upgrade_hint')), findsOneWidget);
+      expect(find.textContaining('老闆的帽子升到 Lv.1'), findsOneWidget);
+      // 按鈕順序：看廣告 → 強化裝備 → 重新開始
+      final adTop = tester.getTopLeft(find.byKey(const ValueKey('dialog_ad'))).dy;
+      final upgradeTop = tester.getTopLeft(find.byKey(const ValueKey('dialog_upgrade'))).dy;
+      expect(upgradeTop, greaterThan(adTop));
+      expect(upgradeTop, lessThan(tester.getTopLeft(find.text('重新開始這一攤')).dy));
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('dialog_upgrade')));
+      expect(find.text('夜市商店'), findsOneWidget);
+      expect(find.text('老闆的帽子  Lv.0 / 3'), findsOneWidget, reason: '直接打開裝備分頁');
+      await tester.tap(find.byKey(const ValueKey('upgrade_hat')));
+      await tester.pump();
+      expect(store.gearLevel(GearType.hat), 1);
+
+      await tester.pageBack();
+      await settle(tester);
+      expect(find.text('時間到了'), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('time'))).data, '62', reason: '用新的帽子重新開始：60 + 2 秒');
+    });
+
+    testWidgets('大胃王時間到：強化裝備前先發這一輪的金幣，回來後再吃一輪', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1), previewSeconds: 0),
+      ));
+      final g = EndlessGame(random: Random(1));
+      for (var n = 0; n < 2; n++) {
+        late int a, b;
+        outer:
+        for (a = 0; a < g.boardSize; a++) {
+          for (b = a + 1; b < g.boardSize; b++) {
+            if (!g.isMatched[a] && !g.isMatched[b] && g.cards[a] == g.cards[b]) break outer;
+          }
+        }
+        await tester.tap(find.byKey(ValueKey('card_$a')));
+        await tester.tap(find.byKey(ValueKey('card_$b')));
+        g.pick(a);
+        g.pick(b);
+        await tester.pump();
+      }
+      await tester.pump(const Duration(seconds: 3)); // 清桌動畫、發下一桌
+      await tester.pump(const Duration(seconds: 75));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('dialog_upgrade')), findsOneWidget);
+      expect(store.coins, 0, reason: '還沒決定之前不發金幣');
+
+      await tapAndSettle(tester, find.byKey(const ValueKey('dialog_upgrade')));
+      expect(store.coins, (800 / EndlessGame.scorePerCoin).round(), reason: '打開商店前先發這一輪的金幣');
+      expect(find.text('老闆的帽子  Lv.0 / 3'), findsOneWidget);
+      await tester.pageBack();
+      await settle(tester);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('score'))).data, '0', reason: '回來後是新的一輪');
+    });
+
+    testWidgets('裝備全部升滿時，不顯示強化裝備', (tester) async {
+      await pumpGame(tester, saved: {for (final t in GearType.values) 'gear_${t.name}': t.maxLevel});
+      await tester.pump(const Duration(seconds: 70));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('時間到了'), findsOneWidget);
+      expect(find.byKey(const ValueKey('dialog_upgrade')), findsNothing);
+      expect(find.byKey(const ValueKey('upgrade_hint')), findsNothing);
+    });
+
+    testWidgets('時間到視窗多了建議和按鈕，在最小螢幕上也放得下', (tester) async {
+      await pumpGame(tester, saved: {'coins': 99999});
+      tester.view.physicalSize = const Size(640, 1136);
+      tester.view.devicePixelRatio = 2;
+      await tester.pump(const Duration(seconds: 60));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('upgrade_hint')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      for (final key in ['dialog_ad', 'dialog_upgrade', 'dialog_leave']) {
+        expect(tester.getRect(find.byKey(ValueKey(key))).bottom, lessThan(568), reason: '$key 在畫面內');
+      }
     });
   });
 }

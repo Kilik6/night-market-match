@@ -4,7 +4,7 @@ import '../theme.dart';
 import 'coin.dart';
 
 /// 結算視窗的選項。
-enum ResultChoice { primary, watchAd, leave }
+enum ResultChoice { primary, watchAd, leave, upgrade }
 
 /// 道具列的一格：圖示、名稱、數量（或「廣告」標籤）。
 class ItemTile extends StatelessWidget {
@@ -106,6 +106,8 @@ class ResultDialog extends StatelessWidget {
     this.adLabel,
     this.stars,
     this.emphasizeAd = false,
+    this.upgradeLabel,
+    this.upgradeHint,
   });
 
   final String title;
@@ -118,6 +120,12 @@ class ResultDialog extends StatelessWidget {
   /// 時間到的視窗用：廣告按鈕排第一個（淺黃底、深黃字和外框），其他兩個按鈕改成黃色外框。
   /// 沒有廣告選項時照一般樣式。
   final bool emphasizeAd;
+
+  /// 「強化裝備再挑戰」選項；沒給就不顯示。
+  final String? upgradeLabel;
+
+  /// 依這一局情況給的裝備建議，顯示在按鈕上方。
+  final String? upgradeHint;
 
   /// 時間到視窗的廣告按鈕底色。
   static const adFill = Color(0xFFFFE08A);
@@ -139,9 +147,24 @@ class ResultDialog extends StatelessWidget {
         child: Text(label, style: AdButton.adLabelStyle),
       );
 
+  /// 「強化裝備再挑戰」：黃色外框加扳手圖示。
+  Widget _upgradeButton(BuildContext context) => OutlinedButton.icon(
+        key: const ValueKey('dialog_upgrade'),
+        onPressed: () => Navigator.of(context).pop(ResultChoice.upgrade),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: NightColors.ink,
+          side: const BorderSide(color: NightColors.glow, width: 2),
+          padding: _padding,
+          shape: _shape,
+        ),
+        icon: const Icon(Icons.build_rounded, size: 18, color: Color(0xFFA2580A)),
+        label: Text(upgradeLabel!, style: AdButton.adLabelStyle),
+      );
+
   @override
   Widget build(BuildContext context) {
     final adFirst = emphasizeAd && adLabel != null;
+    final upgrade = upgradeLabel != null;
     return Dialog(
       backgroundColor: NightColors.paper,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -167,6 +190,28 @@ class ResultDialog extends StatelessWidget {
             const SizedBox(height: 10),
             for (final line in lines)
               CoinText(line, textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
+            if (upgrade && upgradeHint != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                key: const ValueKey('upgrade_hint'),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                decoration: BoxDecoration(
+                  color: adFill.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('💡', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CoinText(upgradeHint!,
+                          style: const TextStyle(color: NightColors.ink, fontSize: 13, height: 1.5)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (adFirst) ...[
               AdButton(
@@ -178,6 +223,10 @@ class ResultDialog extends StatelessWidget {
                 onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
               ),
               const SizedBox(height: 10),
+              if (upgrade) ...[
+                _upgradeButton(context),
+                const SizedBox(height: 10),
+              ],
               _outlined(null, primaryLabel, () => Navigator.of(context).pop(ResultChoice.primary)),
               const SizedBox(height: 10),
               _outlined(
@@ -191,6 +240,10 @@ class ResultDialog extends StatelessWidget {
                   onPaper: true,
                   onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
                 ),
+                const SizedBox(height: 10),
+              ],
+              if (upgrade) ...[
+                _upgradeButton(context),
                 const SizedBox(height: 10),
               ],
               FilledButton(

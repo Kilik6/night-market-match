@@ -81,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
         sounds: widget.sounds,
         random: widget.random,
         previewSeconds: widget.previewSeconds,
+        purchases: _purchases,
       );
 
   @override
@@ -126,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 sounds: widget.sounds,
                 random: widget.random,
                 previewSeconds: widget.previewSeconds,
+                purchases: _purchases,
               )),
             ),
             const SizedBox(height: 10),
