@@ -20,6 +20,7 @@ import 'package:night_market_match/screens/shop_screen.dart';
 import 'package:night_market_match/screens/splash_screen.dart';
 import 'package:night_market_match/services/ad_service.dart';
 import 'package:night_market_match/services/progress_store.dart';
+import 'package:night_market_match/screens/daily_screen.dart';
 import 'package:night_market_match/services/purchase_service.dart';
 import 'package:night_market_match/services/sound_service.dart';
 import 'package:night_market_match/theme.dart';
@@ -83,6 +84,15 @@ void solve(MatchingGame g) {
     g.pick(i);
     g.pick(pairOf(g, i));
   }
+}
+
+/// 每次都回傳「玩家取消」的假商店。
+class _CancelPurchases implements PurchaseService {
+  @override
+  Future<PurchaseResult> buy(String productId) async => PurchaseResult.cancelled;
+
+  @override
+  Future<Set<String>?> restore() async => {};
 }
 
 /// 假的音效服務：只記錄播了哪些音效。
@@ -628,6 +638,55 @@ void main() {
 
       today = today.add(const Duration(days: 3)); // 斷掉
       expect(store.nextCheckInDay, 1);
+    });
+
+    test('月卡：買下給立即金幣，含購買當天共 30 天每天領一次，續購接在後面，剩超過 30 天不能買', () async {
+      SharedPreferences.setMockInitialValues({});
+      var today = DateTime(2026, 12, 20, 23, 50); // 跨年也要算對
+      final store = await ProgressStore.load(clock: () => today);
+      expect(store.monthCardActive, isFalse);
+      expect(await store.claimMonthCard(), 0);
+      expect(store.canBuyMonthCard, isTrue);
+
+      await store.activateMonthCard();
+      expect(store.coins, monthCardInstantCoins);
+      expect(store.monthCardDaysLeft, monthCardDays);
+      expect(store.hasClaimableDaily, isTrue);
+
+      // 每天領一次，同一天不能領兩次
+      var claimed = 0;
+      for (var day = 0; day < monthCardDays; day++) {
+        expect(await store.claimMonthCard(), monthCardDailyCoins, reason: '第 ${day + 1} 天');
+        expect(await store.claimMonthCard(), 0);
+        claimed++;
+        today = today.add(const Duration(days: 1));
+      }
+      expect(claimed, monthCardDays);
+      expect(store.coins, monthCardTotalCoins);
+      expect(store.monthCardActive, isFalse, reason: '第 31 天到期');
+      expect(await store.claimMonthCard(), 0);
+
+      // 到期後再買：從今天重新算
+      await store.activateMonthCard();
+      expect(store.monthCardDaysLeft, monthCardDays);
+      // 續購：接在後面變 60 天，之後剩超過 30 天不能再買
+      expect(store.canBuyMonthCard, isTrue);
+      await store.activateMonthCard();
+      expect(store.monthCardDaysLeft, monthCardDays * 2);
+      expect(store.canBuyMonthCard, isFalse);
+      today = today.add(const Duration(days: monthCardDays));
+      expect(store.monthCardDaysLeft, monthCardDays);
+      expect(store.canBuyMonthCard, isTrue);
+
+      // 重置遊戲進度不會清掉月卡（真錢買的）
+      await store.resetProgress();
+      expect(store.monthCardDaysLeft, monthCardDays);
+    });
+
+    test('月卡數值：每 NT\$1 拿到的金幣是一般方案的兩倍左右', () {
+      expect(monthCardTotalCoins, 10500);
+      final normal = coinPacks.first.coins / coinPacks.first.priceNtd;
+      expect(monthCardTotalCoins / monthCardPriceNtd / normal, closeTo(2.1, 0.1));
     });
 
     test('過關紀錄：零失誤、三星計入成就和每日任務', () async {
@@ -2179,6 +2238,47 @@ void main() {
       await tester.scrollUntilVisible(find.byKey(const ValueKey('restore')), 200, scrollable: vertical.last);
       await tester.pump();
     }
+
+    testWidgets('月卡：商店最上面可以買，買了到每日任務領，商店顯示剩幾天、超過 30 天不能續購', (tester) async {
+      await pumpShop(tester);
+      expect(find.byKey(const ValueKey('month_card')), findsOneWidget);
+      expect(find.byKey(const ValueKey('month_card_days')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('buy_month_card')));
+      await tester.pump();
+      expect(store.coins, monthCardInstantCoins);
+      expect(store.monthCardDaysLeft, monthCardDays);
+      expect(sounds.played.last, Sfx.coin);
+      expect(find.text('月卡剩 30 天，現在續購會接在後面'), findsOneWidget);
+
+      // 續購一次變 60 天，按鈕關掉
+      await tester.tap(find.byKey(const ValueKey('buy_month_card')));
+      await tester.pump();
+      expect(store.monthCardDaysLeft, monthCardDays * 2);
+      expect(tester.widget<FilledButton>(find.byKey(const ValueKey('buy_month_card'))).onPressed, isNull);
+      await tester.pump(const Duration(seconds: 4));
+
+      // 每日任務最上面可以領，領完顯示今天已領
+      await tester.pumpWidget(MaterialApp(home: DailyScreen(store: store, sounds: sounds)));
+      expect(find.byKey(const ValueKey('daily_month_card')), findsOneWidget);
+      final before = store.coins;
+      await tester.tap(find.byKey(const ValueKey('claim_month_card')));
+      await tester.pump();
+      expect(store.coins, before + monthCardDailyCoins);
+      expect(find.text('今天已領'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('月卡：沒有月卡時每日任務不顯示月卡；付款取消不會給金幣', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(home: DailyScreen(store: store, sounds: sounds)));
+      expect(find.byKey(const ValueKey('daily_month_card')), findsNothing);
+
+      final result = await buyMonthCard(_CancelPurchases(), store);
+      expect(result, PurchaseResult.cancelled);
+      expect(store.coins, 0);
+      expect(store.monthCardActive, isFalse);
+    });
 
     test('六種方案由小到大，買越多送越多，最多多送約 15%', () {
       expect(coinPacks.length, 6);

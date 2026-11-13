@@ -112,6 +112,82 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     _report(result, '購買成功，獲得 🪙 ${pack.coins}');
   }
 
+  Future<void> _buyMonthCard() async {
+    if (_buying) return;
+    setState(() => _buying = true);
+    final result = await buyMonthCard(widget.purchases, _store);
+    if (!mounted) return;
+    setState(() => _buying = false);
+    if (result == null) return; // 天數還很多，按鈕本來就是關的
+    _report(result, '購買成功，獲得 🪙 $monthCardInstantCoins！每天記得到「每日任務」領 🪙 $monthCardDailyCoins');
+  }
+
+  /// 夜市月卡：說明、剩餘天數、購買／續購按鈕。
+  Widget _monthCardCard() {
+    final daysLeft = _store.monthCardDaysLeft;
+    final canBuy = _store.canBuyMonthCard;
+    return Container(
+      key: const ValueKey('month_card'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF5A2A1A), NightColors.stall],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NightColors.glow, width: 2),
+        boxShadow: [BoxShadow(color: NightColors.glow.withValues(alpha: 0.25), blurRadius: 16)],
+      ),
+      child: Row(
+        children: [
+          const Text('📅', style: TextStyle(fontSize: 30)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 窄螢幕放不下時，「最划算」標籤換到下一行
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('夜市月卡',
+                        style: TextStyle(color: NightColors.glow, fontSize: 17, fontWeight: FontWeight.w800)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(color: NightColors.lantern, borderRadius: BorderRadius.circular(6)),
+                      child: const Text('最划算',
+                          style: TextStyle(color: NightColors.paper, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                CoinText(
+                  '馬上得到 🪙 $monthCardInstantCoins，之後 $monthCardDays 天每天到「每日任務」領 🪙 $monthCardDailyCoins，'
+                  '共 🪙 $monthCardTotalCoins',
+                  style: const TextStyle(color: NightColors.mist, fontSize: 13, height: 1.4),
+                ),
+                if (daysLeft > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    canBuy ? '月卡剩 $daysLeft 天，現在續購會接在後面' : '月卡剩 $daysLeft 天，剩 $monthCardDays 天以內才能續購',
+                    key: const ValueKey('month_card_days'),
+                    style: const TextStyle(color: NightColors.jade, fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buyButton(const ValueKey('buy_month_card'), 'NT\$$monthCardPriceNtd',
+              _buying || !canBuy ? null : _buyMonthCard),
+        ],
+      ),
+    );
+  }
+
   Future<void> _buyRemoveAds() async {
     if (_buying || _store.adsRemoved) return;
     setState(() => _buying = true);
@@ -362,12 +438,14 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     );
   }
 
-  /// 儲值分頁：永久移除廣告、六種金幣方案、恢復購買。
+  /// 儲值分頁：夜市月卡、永久移除廣告、六種金幣方案、恢復購買。
   Widget _topUpTab() {
     final removed = _store.adsRemoved;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _monthCardCard(),
+        const SizedBox(height: 12),
         Container(
           key: const ValueKey('remove_ads_card'),
           padding: const EdgeInsets.all(14),
@@ -420,7 +498,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         ],
         const SizedBox(height: 6),
         const Text(
-          '購買的金幣存在這支手機裡，刪除 App 或換手機後不會保留。「永久移除廣告」換手機後可以按下面的「恢復購買」取回。',
+          '購買的金幣和月卡存在這支手機裡，刪除 App 或換手機後不會保留。「永久移除廣告」換手機後可以按下面的「恢復購買」取回。',
           style: TextStyle(color: NightColors.mist, fontSize: 12, height: 1.5),
         ),
         const SizedBox(height: 10),

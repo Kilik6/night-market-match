@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/achievements.dart';
 import '../services/progress_store.dart';
+import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/coin.dart';
@@ -35,6 +36,57 @@ class _DailyScreenState extends State<DailyScreen> {
     _toast('簽到成功，獲得 🪙 $coins');
   }
 
+  Future<void> _claimMonthCard() async {
+    final coins = await _store.claimMonthCard();
+    if (coins == 0 || !mounted) return;
+    widget.sounds.play(Sfx.coin);
+    setState(() {});
+    _toast('月卡今日獎勵，獲得 🪙 $coins');
+  }
+
+  /// 夜市月卡的每日領取（有月卡才顯示）。
+  Widget _monthCardRow() {
+    final canClaim = _store.canClaimMonthCard;
+    return Container(
+      key: const ValueKey('daily_month_card'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: NightColors.stall,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NightColors.glow.withValues(alpha: canClaim ? 0.9 : 0.3), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          const Text('📅', style: TextStyle(fontSize: 26)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('夜市月卡',
+                    style: TextStyle(color: NightColors.glow, fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                CoinText(
+                  '每天 🪙 $monthCardDailyCoins・還剩 ${_store.monthCardDaysLeft} 天',
+                  style: const TextStyle(color: NightColors.mist, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          if (canClaim)
+            FilledButton(
+              key: const ValueKey('claim_month_card'),
+              onPressed: _claimMonthCard,
+              style: FilledButton.styleFrom(backgroundColor: NightColors.glow, foregroundColor: NightColors.ink),
+              child: const Text('領取', style: TextStyle(fontWeight: FontWeight.w700)),
+            )
+          else
+            const Text('今天已領', style: TextStyle(color: NightColors.jade, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+
   Future<void> _claim(DailyTask task) async {
     if (!await _store.claimDaily(task) || !mounted) return;
     widget.sounds.play(Sfx.coin);
@@ -52,6 +104,10 @@ class _DailyScreenState extends State<DailyScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
+          if (_store.monthCardActive) ...[
+            _monthCardRow(),
+            const SizedBox(height: 18),
+          ],
           const Text('連續簽到', style: TextStyle(color: NightColors.mist, fontSize: 13, letterSpacing: 1.5)),
           const SizedBox(height: 8),
           Row(

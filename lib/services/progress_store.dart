@@ -6,6 +6,7 @@ import '../game/achievements.dart';
 import '../game/card_skins.dart';
 import '../game/items.dart';
 import '../game/night_market_data.dart';
+import 'purchase_service.dart';
 
 /// 存在手機裡的遊戲進度與設定。key 名稱上架後不要改，否則玩家的存檔會讀不到。
 class ProgressStore {
@@ -22,6 +23,8 @@ class ProgressStore {
   static const _mutedKey = 'muted';
   static const _musicOnKey = 'music_on';
   static const _musicVolumeKey = 'music_volume';
+  static const _monthCardEndKey = 'month_card_end';
+  static const _monthCardClaimedKey = 'month_card_claimed';
   static const _sfxVolumeKey = 'sfx_volume';
   static const _ownedSkinsKey = 'owned_skins';
   static const _equippedSkinKey = 'equipped_skin';
@@ -308,11 +311,53 @@ class ProgressStore {
     return reward;
   }
 
-  bool get hasClaimableDaily => canCheckIn || todayTasks.any((t) => isDailyDone(t) && !isDailyClaimed(t));
+  bool get hasClaimableDaily =>
+      canCheckIn || canClaimMonthCard || todayTasks.any((t) => isDailyDone(t) && !isDailyClaimed(t));
+
+  // ---------- 夜市月卡 ----------
+
+  static DateTime _day(DateTime d) => DateTime.utc(d.year, d.month, d.day);
+
+  /// 月卡最後一天（含）；沒買過是 null。
+  DateTime? get _monthCardEnd {
+    final s = _prefs.getString(_monthCardEndKey);
+    return s == null ? null : DateTime.parse('${s}T00:00:00Z');
+  }
+
+  /// 月卡還剩幾天（含今天）；沒有月卡或過期是 0。
+  int get monthCardDaysLeft {
+    final end = _monthCardEnd;
+    if (end == null) return 0;
+    return max(0, end.difference(_day(_clock())).inDays + 1);
+  }
+
+  bool get monthCardActive => monthCardDaysLeft > 0;
+
+  /// 剩不到 [monthCardDays] 天才能再買，最多預先囤兩期，也避免不小心連買好幾張。
+  bool get canBuyMonthCard => monthCardDaysLeft <= monthCardDays;
+
+  bool get canClaimMonthCard => monthCardActive && _prefs.getString(_monthCardClaimedKey) != _today;
+
+  /// 付款成功後呼叫：天數接在目前的月卡後面（過期就從今天算），並給立即金幣。
+  Future<void> activateMonthCard() async {
+    final today = _day(_clock());
+    final start = monthCardActive ? _monthCardEnd!.add(const Duration(days: 1)) : today;
+    final end = start.add(const Duration(days: monthCardDays - 1));
+    await _prefs.setString(_monthCardEndKey, _dateKey(end));
+    await addCoins(monthCardInstantCoins);
+  }
+
+  /// 領今天的月卡金幣，回傳領到的數量；今天領過或沒有月卡回傳 0。
+  Future<int> claimMonthCard() async {
+    if (!canClaimMonthCard) return 0;
+    await _prefs.setString(_monthCardClaimedKey, _today);
+    await addCoins(monthCardDailyCoins);
+    return monthCardDailyCoins;
+  }
 
   // ---------- 重置 ----------
 
-  /// 重置遊戲進度。保留音樂／音效設定，以及用真錢買的「移除廣告」。
+  /// 重置遊戲進度。保留音樂／音效設定，以及用真錢買的「移除廣告」和月卡。
   Future<void> resetProgress() async {
     final prefixed = _prefs.getKeys().where((k) => _resetPrefixes.any(k.startsWith)).toList();
     for (final k in [

@@ -36,6 +36,18 @@ const coinPacks = <CoinPack>[
   CoinPack(id: 'coins_990', name: '老闆的錢櫃', emoji: '🏪', priceNtd: 990, coins: 38000),
 ];
 
+/// 夜市月卡：買下馬上得到 [monthCardInstantCoins]，之後 [monthCardDays] 天（含購買當天）
+/// 每天到「每日任務」領 [monthCardDailyCoins]，沒領的那天就沒有了。
+/// 在商店後台是一般的消耗型商品（不是自動續訂），玩家想續就再買一次，天數接在後面。
+const monthCardProductId = 'month_card';
+const monthCardPriceNtd = 150;
+const monthCardInstantCoins = 1500;
+const monthCardDailyCoins = 300;
+const monthCardDays = 30;
+
+/// 月卡全部領完的總金幣（每 NT\$1 約 70 枚，是一般金幣方案的兩倍，但要每天上線領）。
+const monthCardTotalCoins = monthCardInstantCoins + monthCardDailyCoins * monthCardDays;
+
 /// 永久移除廣告：只移除自動跳出的插頁廣告，玩家自己點的獎勵廣告保留。
 const removeAdsProductId = 'remove_ads';
 const removeAdsPriceNtd = 180;
@@ -89,6 +101,14 @@ class DevPurchaseService implements PurchaseService {
 Future<PurchaseResult> buyCoinPack(PurchaseService purchases, ProgressStore store, CoinPack pack) async {
   final result = await purchases.buy(pack.id);
   if (result == PurchaseResult.success) await store.addCoins(pack.coins);
+  return result;
+}
+
+/// 買月卡：付款成功就延長天數並給立即金幣。剩餘天數太多時不能買，回傳 null。
+Future<PurchaseResult?> buyMonthCard(PurchaseService purchases, ProgressStore store) async {
+  if (!store.canBuyMonthCard) return null;
+  final result = await purchases.buy(monthCardProductId);
+  if (result == PurchaseResult.success) await store.activateMonthCard();
   return result;
 }
 
