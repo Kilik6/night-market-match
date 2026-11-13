@@ -13,7 +13,12 @@ Future<void> main() async {
   final store = await ProgressStore.load();
   final ads = AdMobService();
   ads.init(); // 不等廣告載入完，先讓畫面出來
-  final sounds = AudioSoundService(muted: store.muted, musicOn: store.musicOn);
+  final sounds = AudioSoundService(
+    muted: store.muted,
+    musicOn: store.musicOn,
+    musicVolume: store.musicVolume(defaultMusicVolume),
+    sfxVolume: store.sfxVolume(defaultSfxVolume),
+  );
   // 音效在開場動畫播放時載入，動畫播完、音效也好了才進首頁
   final soundsReady = sounds.init();
   // 儲值目前用開發測試的假商店（只有 debug 版會成功），之後換成串接 App Store／Google Play 的版本

@@ -21,23 +21,44 @@ abstract class SoundService {
   bool get musicOn;
   set musicOn(bool value);
 
+  /// 背景音樂音量（設定頁的滑桿，0～1），調整後馬上生效。
+  double get musicVolume;
+  set musicVolume(double value);
+
+  /// 音效音量（設定頁的滑桿，0～1）。
+  double get sfxVolume;
+  set sfxVolume(double value);
+
   /// 暫時暫停／恢復背景音樂（播廣告、App 切到背景時用），不影響開關設定。
   void pauseMusic();
   void resumeMusic();
 }
 
+/// 滑桿的預設值：背景音樂在中間（實際音量 0.35，和加滑桿前一樣），音效開到最大。
+const defaultMusicVolume = 0.5;
+const defaultSfxVolume = 1.0;
+
 /// 用 audioplayers 播放。每種音效建一個小型播放池，連續快速翻牌也不會卡。
 class AudioSoundService implements SoundService {
-  AudioSoundService({bool muted = false, bool musicOn = true})
-      : _muted = muted,
-        _musicOn = musicOn;
+  AudioSoundService({
+    bool muted = false,
+    bool musicOn = true,
+    double musicVolume = defaultMusicVolume,
+    double sfxVolume = defaultSfxVolume,
+  })  : _muted = muted,
+        _musicOn = musicOn,
+        _musicVolume = musicVolume.clamp(0, 1),
+        _sfxVolume = sfxVolume.clamp(0, 1);
 
-  static const musicVolume = 0.35;
+  /// 背景音樂滑桿拉到最大時的播放音量。背景音樂要比音效小聲，滑桿中間就是原本的 0.35。
+  static const maxMusicVolume = 0.7;
 
   final Map<Sfx, AudioPool> _pools = {};
   final AudioPlayer _music = AudioPlayer();
   bool _muted;
   bool _musicOn;
+  double _musicVolume;
+  double _sfxVolume;
   bool _musicReady = false;
   bool _musicPaused = false;
 
@@ -46,6 +67,21 @@ class AudioSoundService implements SoundService {
 
   @override
   set muted(bool value) => _muted = value;
+
+  @override
+  double get musicVolume => _musicVolume;
+
+  @override
+  set musicVolume(double value) {
+    _musicVolume = value.clamp(0, 1);
+    if (_musicReady) _music.setVolume(_musicVolume * maxMusicVolume);
+  }
+
+  @override
+  double get sfxVolume => _sfxVolume;
+
+  @override
+  set sfxVolume(double value) => _sfxVolume = value.clamp(0, 1);
 
   @override
   bool get musicOn => _musicOn;
@@ -79,7 +115,7 @@ class AudioSoundService implements SoundService {
 
   void _startMusic() {
     if (!_musicReady || !_musicOn || _musicPaused) return;
-    _music.play(AssetSource('sounds/bgm.wav'), volume: musicVolume).catchError((Object e) {
+    _music.play(AssetSource('sounds/bgm.wav'), volume: _musicVolume * maxMusicVolume).catchError((Object e) {
       debugPrint('背景音樂播放失敗：$e');
     });
   }
@@ -117,8 +153,8 @@ class AudioSoundService implements SoundService {
 
   @override
   void play(Sfx sfx) {
-    if (_muted) return;
-    _pools[sfx]?.start().catchError((Object e) {
+    if (_muted || _sfxVolume <= 0) return;
+    _pools[sfx]?.start(volume: _sfxVolume).catchError((Object e) {
       debugPrint('音效 ${sfx.name} 播放失敗：$e');
       return () async {};
     });

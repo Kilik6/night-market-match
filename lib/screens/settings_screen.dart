@@ -7,7 +7,7 @@ import '../theme.dart';
 import '../widgets/night_scaffold.dart';
 import 'licenses_screen.dart';
 
-/// 設定：背景音樂、音效、恢復購買、重置進度、版本、開源授權。
+/// 設定：背景音樂、音效（開關和音量）、恢復購買、重置進度、版本、開源授權。
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.store, required this.sounds, required this.purchases});
 
@@ -29,6 +29,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _sounds.musicOn = on;
     _store.setMusicOn(on);
     setState(() {});
+  }
+
+  /// 拖動時馬上改音量（背景音樂可以邊拖邊聽），放開才存檔。
+  void _setMusicVolume(double v) {
+    _sounds.musicVolume = v;
+    setState(() {});
+  }
+
+  void _setSfxVolume(double v) {
+    _sounds.sfxVolume = v;
+    setState(() {});
+  }
+
+  /// 音效滑桿放開時播一聲，讓玩家聽聽看現在的大小。
+  void _saveSfxVolume(double v) {
+    _store.setSfxVolume(v);
+    _sounds.play(Sfx.coin);
+  }
+
+  /// 音量滑桿：左邊小喇叭、右邊百分比。開關關掉時變灰、不能拖。
+  Widget _volumeSlider({
+    required Key key,
+    required double value,
+    required bool enabled,
+    required ValueChanged<double> onChanged,
+    required ValueChanged<double> onChangeEnd,
+  }) {
+    final color = enabled ? NightColors.glow : NightColors.mist.withValues(alpha: 0.4);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          Icon(Icons.volume_down_rounded, size: 20, color: color),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: NightColors.glow,
+                inactiveTrackColor: NightColors.paper.withValues(alpha: 0.15),
+                thumbColor: NightColors.glow,
+                // 分 20 段，但不畫段落的小點
+                activeTickMarkColor: Colors.transparent,
+                inactiveTickMarkColor: Colors.transparent,
+                disabledActiveTickMarkColor: Colors.transparent,
+                disabledInactiveTickMarkColor: Colors.transparent,
+                overlayColor: NightColors.glow.withValues(alpha: 0.15),
+                disabledActiveTrackColor: NightColors.mist.withValues(alpha: 0.35),
+                disabledInactiveTrackColor: NightColors.paper.withValues(alpha: 0.08),
+                disabledThumbColor: NightColors.mist.withValues(alpha: 0.5),
+              ),
+              child: Slider(
+                key: key,
+                value: value,
+                divisions: 20,
+                onChanged: enabled ? onChanged : null,
+                onChangeEnd: enabled ? onChangeEnd : null,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              '${(value * 100).round()}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(color: color, fontSize: 14, fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _setSfx(bool on) {
@@ -111,6 +180,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               activeColor: NightColors.glow,
               onChanged: _setMusic,
             ),
+            _volumeSlider(
+              key: const ValueKey('music_volume'),
+              value: _sounds.musicVolume,
+              enabled: _sounds.musicOn,
+              onChanged: _setMusicVolume,
+              onChangeEnd: _store.setMusicVolume,
+            ),
             SwitchListTile(
               key: const ValueKey('sfx_switch'),
               secondary: const Icon(Icons.volume_up_rounded, color: NightColors.glow),
@@ -118,6 +194,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: !_sounds.muted,
               activeColor: NightColors.glow,
               onChanged: _setSfx,
+            ),
+            _volumeSlider(
+              key: const ValueKey('sfx_volume'),
+              value: _sounds.sfxVolume,
+              enabled: !_sounds.muted,
+              onChanged: _setSfxVolume,
+              onChangeEnd: _saveSfxVolume,
             ),
           ]),
           section('購買'),

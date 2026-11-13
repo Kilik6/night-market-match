@@ -21,6 +21,8 @@ class ProgressStore {
   static const _adsRemovedKey = 'ads_removed';
   static const _mutedKey = 'muted';
   static const _musicOnKey = 'music_on';
+  static const _musicVolumeKey = 'music_volume';
+  static const _sfxVolumeKey = 'sfx_volume';
   static const _ownedSkinsKey = 'owned_skins';
   static const _equippedSkinKey = 'equipped_skin';
   static const _bestComboKey = 'stat_best_combo';
@@ -60,6 +62,12 @@ class ProgressStore {
   /// 背景音樂開關，預設開。
   bool get musicOn => _prefs.getBool(_musicOnKey) ?? true;
   Future<void> setMusicOn(bool value) => _prefs.setBool(_musicOnKey, value);
+
+  /// 設定頁的音量滑桿（0～1）。沒存過時用預設值。重置進度不會清掉。
+  double musicVolume(double fallback) => _prefs.getDouble(_musicVolumeKey) ?? fallback;
+  Future<void> setMusicVolume(double value) => _prefs.setDouble(_musicVolumeKey, value);
+  double sfxVolume(double fallback) => _prefs.getDouble(_sfxVolumeKey) ?? fallback;
+  Future<void> setSfxVolume(double value) => _prefs.setDouble(_sfxVolumeKey, value);
 
   Future<void> addCoins(int amount) => _prefs.setInt(_coinsKey, coins + amount);
 

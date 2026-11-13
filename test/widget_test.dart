@@ -100,6 +100,12 @@ class FakeSoundService implements SoundService {
   @override
   bool musicOn = true;
 
+  @override
+  double musicVolume = defaultMusicVolume;
+
+  @override
+  double sfxVolume = defaultSfxVolume;
+
   /// 背景音樂的暫停／恢復紀錄。
   final musicEvents = <String>[];
 
@@ -2220,6 +2226,43 @@ void main() {
       expect(find.byKey(const ValueKey('remove_ads_owned')), findsOneWidget);
       expect(find.byKey(const ValueKey('buy_remove_ads')), findsNothing, reason: '不能重複購買');
       expect(find.textContaining('仍然可以自己選擇看廣告領獎勵'), findsOneWidget);
+    });
+
+    testWidgets('設定：背景音樂和音效各有音量滑桿，拖動會存檔，關掉時滑桿變灰', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+          home: SettingsScreen(store: store, sounds: sounds, purchases: DevPurchaseService(enabled: true))));
+      final music = find.byKey(const ValueKey('music_volume'));
+      final sfx = find.byKey(const ValueKey('sfx_volume'));
+      expect(find.text('50%'), findsOneWidget, reason: '背景音樂預設在中間');
+      expect(find.text('100%'), findsOneWidget, reason: '音效預設最大');
+
+      // 背景音樂拉到最右邊
+      await tester.drag(music, const Offset(400, 0));
+      await tester.pump();
+      expect(sounds.musicVolume, 1.0);
+      expect(store.musicVolume(-1), 1.0, reason: '放開後存檔');
+
+      // 音效拉到最左邊：放開時播一聲試聽（音量 0 的話實際播放器不會出聲）
+      sounds.played.clear();
+      await tester.drag(sfx, const Offset(-400, 0));
+      await tester.pump();
+      expect(sounds.sfxVolume, 0.0);
+      expect(store.sfxVolume(-1), 0.0);
+      expect(sounds.played, [Sfx.coin]);
+      expect(find.text('0%'), findsOneWidget);
+
+      // 關掉背景音樂：滑桿不能拖
+      await tester.tap(find.byKey(const ValueKey('music_switch')));
+      await tester.pump();
+      expect(tester.widget<Slider>(music).onChanged, isNull);
+      await tester.drag(music, const Offset(-400, 0));
+      expect(sounds.musicVolume, 1.0);
+
+      // 重置進度不會清掉音量設定
+      await store.resetProgress();
+      expect(store.musicVolume(-1), 1.0);
+      expect(store.sfxVolume(-1), 0.0);
     });
 
     testWidgets('設定：開源授權列出套件，點進去看授權全文', (tester) async {
