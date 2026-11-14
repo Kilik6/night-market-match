@@ -101,6 +101,23 @@ swift tools/make_food_icons.swift assets/foods && sips -Z 256 assets/foods/*.png
 swift tools/make_icon.swift assets/icon && fvm dart run flutter_launcher_icons
 ```
 
+### Android 正式簽章
+
+上架用的 `.aab` 以上傳金鑰簽署。金鑰檔與密碼不在 repo 裡，設定放在 `android/key.properties`（已被 `.gitignore` 排除）：
+
+```properties
+storePassword=<密碼>
+keyPassword=<密碼>
+keyAlias=upload
+storeFile=<金鑰檔的完整路徑>
+```
+
+```bash
+fvm flutter build appbundle --release   # 輸出 build/app/outputs/bundle/release/app-release.aab
+```
+
+沒有 `key.properties` 時，release 版會改用 debug 金鑰，只能自己測試，無法上傳 Google Play。
+
 ## 開發狀態
 
 遊戲功能已完成，正在準備上架 Google Play 與 App Store。目前廣告使用 Google 官方的測試 ID。
