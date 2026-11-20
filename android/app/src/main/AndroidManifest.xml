@@ -5,10 +5,10 @@
         android:label="夜市翻牌"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- AdMob App ID：目前是 Google 官方測試用 ID，上架前要換成自己的 -->
+        <!-- AdMob App ID（夜市翻牌 Android）。廣告單元 ID 在 lib/services/ad_service.dart，debug 版用測試廣告 -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-3699832160827795~5536292810"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

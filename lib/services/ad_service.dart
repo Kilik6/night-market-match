@@ -13,16 +13,16 @@ abstract class AdService {
   Future<void> showInterstitial();
 }
 
-/// 廣告單元 ID。目前全部是 Google 官方的測試用 ID，
-/// 上架前要換成自己 AdMob 帳號裡建立的 ID，否則不會有收益。
+/// 廣告單元 ID：正式版（release）用自己 AdMob 帳號的 ID 才有收益；
+/// debug 版（開發、模擬器）一律用 Google 官方的測試 ID，避免開發時點到自己的正式廣告被判無效流量。
 abstract final class AdUnitIds {
-  static String get rewarded => Platform.isIOS
-      ? 'ca-app-pub-3940256099942544/1712485313'
-      : 'ca-app-pub-3940256099942544/5224354917';
+  static String get rewarded => kReleaseMode
+      ? (Platform.isIOS ? 'ca-app-pub-3699832160827795/9913475340' : 'ca-app-pub-3699832160827795/7018176707')
+      : (Platform.isIOS ? 'ca-app-pub-3940256099942544/1712485313' : 'ca-app-pub-3940256099942544/5224354917');
 
-  static String get interstitial => Platform.isIOS
-      ? 'ca-app-pub-3940256099942544/4411468910'
-      : 'ca-app-pub-3940256099942544/1033173712';
+  static String get interstitial => kReleaseMode
+      ? (Platform.isIOS ? 'ca-app-pub-3699832160827795/6852197733' : 'ca-app-pub-3699832160827795/8058514371')
+      : (Platform.isIOS ? 'ca-app-pub-3940256099942544/4411468910' : 'ca-app-pub-3940256099942544/1033173712');
 }
 
 /// 串接 Google AdMob 的實作：啟動時先預載廣告，播完再自動載入下一則。
