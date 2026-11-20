@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/ad_service.dart';
 import '../services/progress_store.dart';
 import '../services/purchase_service.dart';
 import '../services/reminder_service.dart';
@@ -8,7 +9,7 @@ import '../theme.dart';
 import '../widgets/night_scaffold.dart';
 import 'licenses_screen.dart';
 
-/// 設定：背景音樂、音效（開關和音量）、恢復購買、重置進度、版本、開源授權。
+/// 設定：背景音樂、音效（開關和音量）、每日提醒、恢復購買、廣告隱私權（需要的地區）、重置進度、版本、開源授權。
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -16,7 +17,11 @@ class SettingsScreen extends StatefulWidget {
     required this.sounds,
     required this.purchases,
     this.reminders,
+    this.adPrivacy,
   });
+
+  /// 廣告隱私權選項；所在地區需要時才顯示「廣告隱私權設定」。
+  final AdPrivacy? adPrivacy;
 
   final ProgressStore store;
   final SoundService sounds;
@@ -262,6 +267,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _restore,
             ),
           ]),
+          if (widget.adPrivacy?.privacyOptionsRequired ?? false) ...[
+            section('隱私權'),
+            group([
+              ListTile(
+                key: const ValueKey('privacy_options'),
+                leading: const Icon(Icons.privacy_tip_outlined, color: NightColors.glow),
+                title: const Text('廣告隱私權設定', style: labelStyle),
+                subtitle: const Text('重新選擇是否同意個人化廣告', style: TextStyle(color: NightColors.mist, fontSize: 13)),
+                trailing: const Icon(Icons.chevron_right_rounded, color: NightColors.mist),
+                onTap: () => widget.adPrivacy!.showPrivacyOptions(),
+              ),
+            ]),
+          ],
           section('遊戲資料'),
           group([
             ListTile(

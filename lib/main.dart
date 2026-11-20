@@ -13,7 +13,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await ProgressStore.load();
   final ads = AdMobService();
-  ads.init(); // 不等廣告載入完，先讓畫面出來
   final sounds = AudioSoundService(
     muted: store.muted,
     musicOn: store.musicOn,
@@ -37,6 +36,8 @@ Future<void> main() async {
     reminders: reminders,
     loading: soundsReady,
   ));
+  // 畫面出來後才取得廣告同意（歐洲等地區會跳出 Google 的同意表單）、載入廣告，不擋開場動畫
+  ads.init();
 }
 
 class NightMarketMatchApp extends StatefulWidget {

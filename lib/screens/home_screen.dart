@@ -204,7 +204,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 10),
                 _tile('settings', Icons.settings_rounded, '設定',
                     () => _open(SettingsScreen(
-                        store: _store, sounds: widget.sounds, purchases: _purchases, reminders: widget.reminders))),
+                          store: _store,
+                          sounds: widget.sounds,
+                          purchases: _purchases,
+                          reminders: widget.reminders,
+                          adPrivacy: widget.ads is AdPrivacy ? widget.ads as AdPrivacy : null,
+                        ))),
               ],
             ),
           ],

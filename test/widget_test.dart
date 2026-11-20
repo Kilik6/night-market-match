@@ -81,6 +81,17 @@ class FakeAdService implements AdService {
   Future<void> showInterstitial() async => interstitialShown++;
 }
 
+class FakeAdPrivacy implements AdPrivacy {
+  bool required = false;
+  int shown = 0;
+
+  @override
+  bool get privacyOptionsRequired => required;
+
+  @override
+  Future<void> showPrivacyOptions() async => shown++;
+}
+
 int pairOf(MatchingGame g, int i) =>
     List.generate(g.cards.length, (j) => j).firstWhere((j) => j != i && g.cards[j] == g.cards[i]);
 int differentFrom(MatchingGame g, int i) =>
@@ -2621,6 +2632,26 @@ void main() {
       expect(find.byKey(const ValueKey('remove_ads_owned')), findsOneWidget);
       expect(find.byKey(const ValueKey('buy_remove_ads')), findsNothing, reason: '不能重複購買');
       expect(find.textContaining('仍然可以自己選擇看廣告領獎勵'), findsOneWidget);
+    });
+
+    testWidgets('設定：所在地區需要時才有「廣告隱私權設定」，點了打開同意表單', (tester) async {
+      await setUpStore(tester, const {});
+      final privacy = FakeAdPrivacy();
+      Future<void> pump() => tester.pumpWidget(MaterialApp(
+          home: SettingsScreen(
+              key: UniqueKey(),
+              store: store,
+              sounds: sounds,
+              purchases: DevPurchaseService(enabled: true),
+              adPrivacy: privacy)));
+      await pump();
+      expect(find.byKey(const ValueKey('privacy_options')), findsNothing, reason: '不在歐洲等地區不用顯示');
+      privacy.required = true;
+      await pump();
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('privacy_options')), 200);
+      await tester.tap(find.byKey(const ValueKey('privacy_options')));
+      await tester.pump();
+      expect(privacy.shown, 1);
     });
 
     testWidgets('設定：背景音樂和音效各有音量滑桿，拖動會存檔，關掉時滑桿變灰', (tester) async {
