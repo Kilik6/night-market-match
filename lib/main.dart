@@ -5,6 +5,7 @@ import 'screens/splash_screen.dart';
 import 'services/ad_service.dart';
 import 'services/progress_store.dart';
 import 'services/purchase_service.dart';
+import 'services/reminder_service.dart';
 import 'services/sound_service.dart';
 import 'theme.dart';
 
@@ -23,7 +24,19 @@ Future<void> main() async {
   final soundsReady = sounds.init();
   // 儲值目前用開發測試的假商店（只有 debug 版會成功），之後換成串接 App Store／Google Play 的版本
   final purchases = DevPurchaseService();
-  runApp(NightMarketMatchApp(store: store, ads: ads, sounds: sounds, purchases: purchases, loading: soundsReady));
+  // 每日提醒：設定時區和通知（不會跳權限詢問），有開提醒的話依今天的進度重排
+  final reminders = LocalReminderService();
+  reminders.init().then((_) {
+    if (store.reminderOn) reminders.reschedule(store);
+  });
+  runApp(NightMarketMatchApp(
+    store: store,
+    ads: ads,
+    sounds: sounds,
+    purchases: purchases,
+    reminders: reminders,
+    loading: soundsReady,
+  ));
 }
 
 class NightMarketMatchApp extends StatefulWidget {
@@ -33,8 +46,11 @@ class NightMarketMatchApp extends StatefulWidget {
     required this.ads,
     required this.sounds,
     required this.purchases,
+    this.reminders,
     this.loading,
   });
+
+  final ReminderService? reminders;
 
   final ProgressStore store;
   final AdService ads;
@@ -68,6 +84,8 @@ class _NightMarketMatchAppState extends State<NightMarketMatchApp> with WidgetsB
       widget.sounds.resumeMusic();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       widget.sounds.pauseMusic();
+      // 離開 App 時依最新進度重排提醒（例如已經簽到了，就改成明天提醒）
+      if (widget.store.reminderOn) widget.reminders?.reschedule(widget.store);
     }
   }
 
@@ -87,7 +105,13 @@ class _NightMarketMatchAppState extends State<NightMarketMatchApp> with WidgetsB
       ),
       home: SplashScreen(
         loading: widget.loading,
-        next: (_) => HomeScreen(store: widget.store, ads: widget.ads, sounds: widget.sounds, purchases: widget.purchases),
+        next: (_) => HomeScreen(
+          store: widget.store,
+          ads: widget.ads,
+          sounds: widget.sounds,
+          purchases: widget.purchases,
+          reminders: widget.reminders,
+        ),
       ),
     );
   }

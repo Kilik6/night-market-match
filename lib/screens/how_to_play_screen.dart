@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../game/achievements.dart';
+import '../game/daily_challenge.dart';
 import '../game/endless_game.dart';
 import '../game/items.dart';
 import '../game/matching_game.dart';
@@ -42,7 +44,7 @@ class HowToPlayScreen extends StatelessWidget {
               '從南機場夜市逛到士林夜市，共 ${levels.length} 攤，越後面時間越緊。',
               '在時間內把牌全部配完就過關，並解鎖下一攤。',
               '剩下的時間每秒再加 ${MatchingGame.bonusPerSecond} 分。剩下超過一半的時間拿 3 顆星、超過 1/4 拿 2 顆星，其餘 1 顆星。',
-              '過關金幣是分數 ÷ 10。',
+              '過關金幣是分數 ÷ 10。重玩同一攤時，要分數破紀錄才有金幣，而且只算比之前多出來的分數。',
             ],
           ),
           _Section(
@@ -50,13 +52,13 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🔥',
             title: '夜市大胃王',
             lines: [
-              '一桌一桌吃：配對成功的牌會被吃掉，整桌清空就發下一桌，一直吃到時間用完，挑戰最高分。',
-              '牌越來越多：第 1～2 桌 4 張、第 3～5 桌 6 張、第 6～9 桌 8 張，第 10 桌起 16 張。每一桌開始都會先翻開讓你記。',
-              '清桌獎勵：${EndlessGame.clearBonusPerTable} × 第幾桌的分數，時間再 +${EndlessGame.clearBonusSeconds} 秒。',
-              '從 ${EndlessGame.startSeconds} 秒開始，每配對一組加時間：'
-                  '前 20 組 +${EndlessGame.timeGainFor(0)} 秒、到第 50 組 +${EndlessGame.timeGainFor(20)} 秒，'
-                  '之後 +${EndlessGame.timeGainFor(50)} 秒。翻錯不扣時間。',
+              '沒有時間限制，可以慢慢想。桌子有 ${EndlessGame.capacity} 個位子，開局先上一組菜並翻開讓你記。',
+              '老闆會一直上菜：每翻一次牌，上菜進度就前進一點，新菜是蓋著上桌的；吃得越多，上得越快。',
+              '每翻錯 ${EndlessGame.missesPerPenalty} 次，老闆會多加一組菜。要上菜時桌子已經塞滿，就吃不下收攤了，挑戰最高分。',
+              '每組得分 ${EndlessGame.pointsPerMatch} × 連擊。連續配對 ${EndlessGame.feverAt} 組進入「大胃王時間」，接下來 ${EndlessGame.feverMatches} 組分數 ×${EndlessGame.feverMultiplier}，翻錯就結束。',
+              '把桌上全部吃光有獎勵（第幾次吃光 × ${EndlessGame.allClearBonus} 分），下一波菜會一次上好幾組並翻開讓你記。',
               '連續翻錯 ${EndlessGame.bossHintAfterMisses} 次，老闆會偷偷亮出一組對子；提示過後要再配對 ${EndlessGame.bossHintCooldownMatches} 組才會再提示。',
+              '桌子塞滿時可以看廣告「吃胃藥」，收掉 ${EndlessGame.reviveRemovePairs * 2} 張牌繼續吃，每輪一次。',
               '金幣是分數 ÷ ${EndlessGame.scorePerCoin}。',
             ],
           ),
@@ -66,7 +68,7 @@ class HowToPlayScreen extends StatelessWidget {
             title: '道具',
             lines: [
               for (final type in ItemType.values) '${type.emoji} ${type.label}：${type.description}',
-              '每一局每種道具只能用一次。用完了可以在商店買，或在遊戲中看廣告免費領 1 個。',
+              '每一局每種道具只能用一次。用完了可以在商店買，或在遊戲中看廣告免費領 1 個。沙漏是加時間的，只能在夜市走透透用。',
             ],
           ),
           _Section(
@@ -74,13 +76,13 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🛠️',
             title: '裝備',
             lines: [
-              '在商店用金幣升級，效果永久有效；標示「大胃王限定」的只在夜市大胃王有效果。',
-              '${GearType.hat.emoji} ${GearType.hat.label}：每升一級，每局時間 +${GearEffects.bonusSeconds(1)} 秒。',
+              '在商店用金幣升級，效果永久有效；標示「大胃王限定」或「走透透限定」的只在那個模式有效果。',
+              '${GearType.hat.emoji} ${GearType.hat.label}${GearType.hat.modeTag}：每升一級，每局時間 +${GearEffects.bonusSeconds(1)} 秒。',
               '${GearType.abacus.emoji} ${GearType.abacus.label}：每升一級，金幣 +${((GearEffects.coinMultiplier(1) - 1) * 100).round()}%。',
               '${GearType.cart.emoji} ${GearType.cart.label}：每升一級，連擊上限 +${GearEffects.comboCap(1) - GearEffects.comboCap(0)}。',
-              '${GearType.glasses.emoji} ${GearType.glasses.label}：每升一級，開局翻牌記憶時間 +${GearEffects.previewBonusSeconds(1)} 秒。',
+              '${GearType.glasses.emoji} ${GearType.glasses.label}：每升一級，翻牌記憶時間 +${GearEffects.previewBonusSeconds(1)} 秒。',
               '${GearType.lunchBag.emoji} ${GearType.lunchBag.label}：Lv.1 翻錯時連擊只少 1 段、不會歸零；Lv.2 每局第一次翻錯完全不扣。',
-              '${GearType.backpack.emoji} ${GearType.backpack.label}（大胃王限定）：每升一級，清桌獎勵 +${((GearEffects.clearBonusMultiplier(1) - 1) * 100).round()}%。',
+              '${GearType.backpack.emoji} ${GearType.backpack.label}（大胃王限定）：每升一級，全部吃光的獎勵 +${((GearEffects.clearBonusMultiplier(1) - 1) * 100).round()}%。',
               '${GearType.favor.emoji} ${GearType.favor.label}（大胃王限定）：每升一級，老闆提示的冷卻少 ${GearEffects.bossHintCooldownCut(1)} 組。',
             ],
           ),
@@ -99,7 +101,9 @@ class HowToPlayScreen extends StatelessWidget {
             emoji: '🎁',
             title: '更多獎勵',
             lines: [
-              '每日任務：每天 3 個任務，完成就能領金幣；連續簽到獎勵越來越多。',
+              '每日任務：每天 $dailyTaskCount 個任務，走透透、大胃王、每日挑戰和轉盤都有，完成就能領金幣；連續簽到獎勵越來越多。任務和簽到都可以看廣告多領一次。',
+              '夜市轉盤：每天免費轉一次，看廣告每天最多再轉 3 次，抽金幣或道具。',
+              '每日挑戰：一天只能玩一次，大家吃同一盤、都只有 $dailyTurnLimit 翻，翻完就結束。每天還有一條特殊規則（連擊加倍、快手、吃光獎勵 ×3、老闆休假、大胃王日輪流）。為了公平不能用道具和裝備加成；中途離開以當下分數記錄。連續每天挑戰有成就獎勵，30 天送限定卡背。',
               '成就：達成條件領金幣，部分成就送限定卡背。',
               '小吃圖鑑：配對過的小吃會收錄進圖鑑，看看每一樣小吃的介紹。',
             ],

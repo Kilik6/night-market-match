@@ -118,8 +118,11 @@ class MatchingGame {
 
   int get coinsEarned {
     if (!isWon) return 0;
-    return (score / 10 * coinMultiplier * (luckyCatActive ? luckyCatMultiplier : 1)).round();
+    return coinsFor(score);
   }
+
+  /// 多少分換多少金幣（分數 ÷ 10，算盤和招財貓加成）。重玩破紀錄時只拿多出來的分數換。
+  int coinsFor(int points) => (points / 10 * coinMultiplier * (luckyCatActive ? luckyCatMultiplier : 1)).round();
 
   void reset() {
     final picks = (_pool.toList()..shuffle(_random)).take(level.pairs).toList();

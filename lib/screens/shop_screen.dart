@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../game/card_skins.dart';
 import '../game/items.dart';
+import '../game/wheel.dart';
+import '../services/ad_service.dart';
 import '../services/progress_store.dart';
 import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
@@ -18,6 +20,7 @@ class ShopScreen extends StatefulWidget {
     required this.sounds,
     required this.purchases,
     this.initialTab = 0,
+    this.ads,
   });
 
   /// 「裝備」分頁的位置（時間到的「強化裝備再挑戰」直接打開這一頁）。
@@ -38,9 +41,10 @@ class ShopScreen extends StatefulWidget {
       return total(a).compareTo(total(b));
     });
 
-  /// 卡背：能用金幣買的依價格由便宜到貴（免費的紅燈籠在最前面），只能靠成就取得的排在最後。
+  /// 卡背：能用金幣買的依價格由便宜到貴（免費的紅燈籠在最前面），接著是新手禮包限定，只能靠成就取得的排在最後。
   static final sortedSkins = [
-    ...cardSkins.where((s) => !s.achievementOnly).toList()..sort((a, b) => a.price.compareTo(b.price)),
+    ...cardSkins.where((s) => s.buyable).toList()..sort((a, b) => a.price.compareTo(b.price)),
+    ...cardSkins.where((s) => s.packOnly),
     ...cardSkins.where((s) => s.achievementOnly),
   ];
 
@@ -48,6 +52,9 @@ class ShopScreen extends StatefulWidget {
   final SoundService sounds;
   final PurchaseService purchases;
   final int initialTab;
+
+  /// 看廣告領金幣用。沒給就不顯示這個選項。
+  final AdService? ads;
 
   @override
   State<ShopScreen> createState() => _ShopScreenState();
@@ -120,6 +127,101 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     setState(() => _buying = false);
     if (result == null) return; // 天數還很多，按鈕本來就是關的
     _report(result, '購買成功，獲得 🪙 $monthCardInstantCoins！每天記得到「每日任務」領 🪙 $monthCardDailyCoins');
+  }
+
+  Future<void> _buyStarterPack() async {
+    if (_buying) return;
+    setState(() => _buying = true);
+    final result = await buyStarterPack(widget.purchases, _store);
+    if (!mounted) return;
+    setState(() => _buying = false);
+    if (result == null) return;
+    _report(result, '購買成功！獲得 🪙 $starterPackCoins、每種道具各 $starterPackItemsEach 個和限定卡背');
+  }
+
+  /// 新手禮包：限購一次，金幣、道具、限定卡背。
+  Widget _starterPackCard() {
+    final skin = skinById(starterPackSkinId);
+    return Container(
+      key: const ValueKey('starter_pack'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF7A1B1B), NightColors.stall],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFD43B), width: 2),
+        boxShadow: [BoxShadow(color: const Color(0xFFFFD43B).withValues(alpha: 0.3), blurRadius: 18)],
+      ),
+      child: Row(
+        children: [
+          SizedBox(width: 44, height: 58, child: CardBack(skin: skin, width: 44)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('新手禮包',
+                        style: TextStyle(color: Color(0xFFFFD43B), fontSize: 17, fontWeight: FontWeight.w800)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(color: NightColors.lantern, borderRadius: BorderRadius.circular(6)),
+                      child: const Text('限購一次',
+                          style: TextStyle(color: NightColors.paper, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                CoinText(
+                  '🪙 $starterPackCoins・每種道具各 $starterPackItemsEach 個・限定卡背「${skin.name}」',
+                  style: const TextStyle(color: NightColors.mist, fontSize: 13, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buyButton(const ValueKey('buy_starter_pack'), 'NT\$$starterPackPriceNtd', _buying ? null : _buyStarterPack),
+        ],
+      ),
+    );
+  }
+
+  /// 看廣告領金幣：每天有次數限制。
+  Future<void> _watchAdForCoins() async {
+    final ads = widget.ads;
+    if (ads == null || _buying || _store.shopAdCoinsLeft == 0) return;
+    setState(() => _buying = true);
+    widget.sounds.pauseMusic();
+    final earned = await ads.showRewarded();
+    widget.sounds.resumeMusic();
+    if (!mounted) return;
+    setState(() => _buying = false);
+    if (!earned) {
+      _toast('廣告目前無法播放，請稍後再試');
+      return;
+    }
+    final coins = await _store.claimShopAdCoins();
+    if (!mounted || coins == 0) return;
+    widget.sounds.play(Sfx.coin);
+    setState(() {});
+    _toast('獲得 🪙 $coins');
+  }
+
+  Widget _adCoinsCard() {
+    final left = _store.shopAdCoinsLeft;
+    return _row(
+      emoji: '📺',
+      title: '看廣告領金幣',
+      subtitle: left > 0 ? '每次 🪙 $shopAdCoins・今天還剩 $left 次' : '今天的次數用完了，明天再來',
+      action: _buyButton(const ValueKey('ad_coins'), '看廣告', left > 0 && !_buying ? _watchAdForCoins : null),
+    );
   }
 
   /// 夜市月卡：說明、剩餘天數、購買／續購按鈕。
@@ -241,6 +343,11 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       _toast('完成成就「${skin.name}」就能獲得');
       return;
     }
+    if (skin.packOnly) {
+      _toast('新手禮包限定卡背，到「儲值」分頁看看');
+      _tabs.animateTo(ShopScreen.topUpTab);
+      return;
+    }
     if (_store.coins < skin.price) {
       _notEnough(skin.price);
       return;
@@ -353,7 +460,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         final next = cost == null ? '已達最高等級' : '下一級：${type.effect(level + 1)}';
         return _row(
           emoji: type.emoji,
-          title: '${type.label}${type.endlessOnly ? '（大胃王限定）' : ''}  Lv.$level / ${type.maxLevel}',
+          title: '${type.label}${type.modeTag}  Lv.$level / ${type.maxLevel}',
           subtitle: level == 0 ? next : '${type.effect(level)}\n$next',
           action: cost == null
               ? const Text('滿級', style: TextStyle(color: NightColors.jade, fontWeight: FontWeight.w700))
@@ -386,6 +493,8 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
           label = '換上';
         } else if (skin.achievementOnly) {
           label = '🏆 成就獎勵';
+        } else if (skin.packOnly) {
+          label = '🎁 新手禮包';
         } else {
           label = '🪙 ${skin.price}';
         }
@@ -444,6 +553,14 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (!_store.starterPackBought) ...[
+          _starterPackCard(),
+          const SizedBox(height: 12),
+        ],
+        if (widget.ads != null) ...[
+          _adCoinsCard(),
+          const SizedBox(height: 12),
+        ],
         _monthCardCard(),
         const SizedBox(height: 12),
         Container(

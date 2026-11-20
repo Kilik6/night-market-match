@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// 卡背的底紋。紅燈籠維持單色（[plain]），其他每款各有一種呼應主題的花紋。
 enum CardPattern { plain, lattice, stars, mahjong, poke, waves, confetti, rings, checker, map, rays, chevron, pinstripe, sparkle }
 
-/// 卡背造型：用金幣在商店解鎖，部分只能靠成就取得。
+/// 卡背造型：用金幣在商店解鎖，部分只能靠成就或新手禮包取得。
 class CardSkin {
   const CardSkin({
     required this.id,
@@ -14,6 +14,7 @@ class CardSkin {
     required this.mark,
     required this.markColor,
     this.achievementOnly = false,
+    this.packOnly = false,
     this.markScale = 1,
     this.pattern = CardPattern.plain,
   });
@@ -31,6 +32,12 @@ class CardSkin {
 
   /// 只能靠成就取得，不能用金幣買。
   final bool achievementOnly;
+
+  /// 只有買新手禮包才拿得到，不能用金幣買。
+  final bool packOnly;
+
+  /// 能不能用金幣買。
+  bool get buyable => !achievementOnly && !packOnly;
 
   /// 卡背圖案的放大倍率。emoji 圖案四周有留白，看起來比文字小，要放大一點。
   final double markScale;
@@ -140,6 +147,17 @@ const cardSkins = <CardSkin>[
     pattern: CardPattern.checker,
   ),
   CardSkin(
+    id: 'grand_opening',
+    name: '開張大吉',
+    price: 0,
+    base: Color(0xFFB71C1C),
+    edge: Color(0xFFFFD43B),
+    mark: '開',
+    markColor: Color(0xFFFFD43B),
+    pattern: CardPattern.lattice,
+    packOnly: true,
+  ),
+  CardSkin(
     id: 'tour',
     name: '全台走透透',
     price: 0,
@@ -172,6 +190,17 @@ const cardSkins = <CardSkin>[
     markColor: Color(0xFFFBF1DC),
     achievementOnly: true,
     pattern: CardPattern.chevron,
+  ),
+  CardSkin(
+    id: 'moonlight',
+    name: '月光常客',
+    price: 0,
+    base: Color(0xFF1F2A5C),
+    edge: Color(0xFFE8D9A8),
+    mark: '月',
+    markColor: Color(0xFFF5E6B8),
+    achievementOnly: true,
+    pattern: CardPattern.stars,
   ),
   CardSkin(
     id: 'foodking',

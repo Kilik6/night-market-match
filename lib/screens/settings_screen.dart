@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/progress_store.dart';
 import '../services/purchase_service.dart';
+import '../services/reminder_service.dart';
 import '../services/sound_service.dart';
 import '../theme.dart';
 import '../widgets/night_scaffold.dart';
@@ -9,11 +10,20 @@ import 'licenses_screen.dart';
 
 /// 設定：背景音樂、音效（開關和音量）、恢復購買、重置進度、版本、開源授權。
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.store, required this.sounds, required this.purchases});
+  const SettingsScreen({
+    super.key,
+    required this.store,
+    required this.sounds,
+    required this.purchases,
+    this.reminders,
+  });
 
   final ProgressStore store;
   final SoundService sounds;
   final PurchaseService purchases;
+
+  /// 每日提醒；沒給就不顯示這個開關。
+  final ReminderService? reminders;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -105,6 +115,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _store.setMuted(!on);
     if (on) _sounds.play(Sfx.flip);
     setState(() {});
+  }
+
+  /// 打開每日提醒要先請使用者允許通知；不允許就維持關閉並提示。
+  Future<void> _setReminder(bool on) async {
+    final reminders = widget.reminders!;
+    if (on) {
+      final allowed = await reminders.requestPermission();
+      if (!mounted) return;
+      if (!allowed) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('沒有通知權限，請到手機的「設定」允許夜市翻牌傳送通知')));
+        return;
+      }
+      await _store.setReminderOn(true);
+      await reminders.reschedule(_store);
+    } else {
+      await _store.setReminderOn(false);
+      await reminders.cancelAll();
+    }
+    if (mounted) setState(() {});
   }
 
   /// 恢復購買（Apple 規定要有）：換手機的玩家可以拿回「永久移除廣告」。
@@ -203,6 +234,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChangeEnd: _saveSfxVolume,
             ),
           ]),
+          if (widget.reminders != null) ...[
+            section('通知'),
+            group([
+              SwitchListTile(
+                key: const ValueKey('reminder_switch'),
+                secondary: const Icon(Icons.notifications_rounded, color: NightColors.glow),
+                title: const Text('每日提醒', style: labelStyle),
+                subtitle: const Text('晚上 8 點提醒簽到、轉盤和月卡，一天最多一則',
+                    style: TextStyle(color: NightColors.mist, fontSize: 13)),
+                value: _store.reminderOn,
+                activeColor: NightColors.glow,
+                onChanged: _setReminder,
+              ),
+            ]),
+          ],
           section('購買'),
           group([
             ListTile(

@@ -36,6 +36,13 @@ const coinPacks = <CoinPack>[
   CoinPack(id: 'coins_990', name: '老闆的錢櫃', emoji: '🏪', priceNtd: 990, coins: 38000),
 ];
 
+/// 新手禮包：每個人只能買一次的超值包，金幣、每種道具各幾個，加上限定卡背。
+const starterPackProductId = 'starter_pack';
+const starterPackPriceNtd = 60;
+const starterPackCoins = 3000;
+const starterPackItemsEach = 3;
+const starterPackSkinId = 'grand_opening';
+
 /// 夜市月卡：買下馬上得到 [monthCardInstantCoins]，之後 [monthCardDays] 天（含購買當天）
 /// 每天到「每日任務」領 [monthCardDailyCoins]，沒領的那天就沒有了。
 /// 在商店後台是一般的消耗型商品（不是自動續訂），玩家想續就再買一次，天數接在後面。
@@ -89,7 +96,7 @@ class DevPurchaseService implements PurchaseService {
   @override
   Future<PurchaseResult> buy(String productId) async {
     if (!enabled) return PurchaseResult.unavailable;
-    if (productId == removeAdsProductId) _owned.add(productId);
+    if (productId == removeAdsProductId || productId == starterPackProductId) _owned.add(productId);
     return PurchaseResult.success;
   }
 
@@ -112,6 +119,14 @@ Future<PurchaseResult?> buyMonthCard(PurchaseService purchases, ProgressStore st
   return result;
 }
 
+/// 買新手禮包：付款成功就發金幣、道具和卡背。已經買過回傳 null。
+Future<PurchaseResult?> buyStarterPack(PurchaseService purchases, ProgressStore store) async {
+  if (store.starterPackBought) return null;
+  final result = await purchases.buy(starterPackProductId);
+  if (result == PurchaseResult.success) await store.grantStarterPack();
+  return result;
+}
+
 /// 買永久移除廣告：付款成功就記進存檔。
 Future<PurchaseResult> buyRemoveAds(PurchaseService purchases, ProgressStore store) async {
   if (store.adsRemoved) return PurchaseResult.success;
@@ -120,11 +135,19 @@ Future<PurchaseResult> buyRemoveAds(PurchaseService purchases, ProgressStore sto
   return result;
 }
 
-/// 恢復購買。回傳是否恢復了移除廣告；無法使用時回傳 null。
+/// 恢復購買：拿回「永久移除廣告」和新手禮包的限定卡背（金幣和道具是消耗品，不會恢復）。
+/// 回傳是否恢復了任何東西；無法使用時回傳 null。
 Future<bool?> restorePurchases(PurchaseService purchases, ProgressStore store) async {
   final owned = await purchases.restore();
   if (owned == null) return null;
-  if (!owned.contains(removeAdsProductId)) return false;
-  await store.setAdsRemoved(true);
-  return true;
+  var restored = false;
+  if (owned.contains(removeAdsProductId)) {
+    await store.setAdsRemoved(true);
+    restored = true;
+  }
+  if (owned.contains(starterPackProductId)) {
+    await store.restoreStarterPack();
+    restored = true;
+  }
+  return restored;
 }

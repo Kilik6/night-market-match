@@ -46,7 +46,14 @@ class ItemTile extends StatelessWidget {
 
 /// 有「廣告」標籤的按鈕，讓玩家一眼看出按了會播廣告。
 class AdButton extends StatelessWidget {
-  const AdButton({super.key, required this.label, required this.onPressed, this.onPaper = false, this.fill});
+  const AdButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.onPaper = false,
+    this.fill,
+    this.prominent = false,
+  });
 
   final String label;
   final VoidCallback? onPressed;
@@ -57,11 +64,42 @@ class AdButton extends StatelessWidget {
   /// 按鈕底色；沒指定就是透明（只有外框）。
   final Color? fill;
 
+  /// 黃色實心的主要按鈕樣式（過關視窗的「看廣告，金幣 ×2」），「廣告」標籤照樣顯示。
+  final bool prominent;
+
   /// 廣告按鈕的文字樣式，時間到視窗的其他按鈕也用一樣的字。
   static const adLabelStyle = TextStyle(fontSize: 15, fontWeight: FontWeight.w500);
 
   @override
   Widget build(BuildContext context) {
+    if (prominent) {
+      return FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: NightColors.glow,
+          foregroundColor: NightColors.ink,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              // 和時間到視窗的廣告標籤一樣：深黃底、淺色字
+              decoration: BoxDecoration(color: const Color(0xFFA2580A), borderRadius: BorderRadius.circular(4)),
+              child: const Text('廣告', style: TextStyle(fontSize: 11, color: NightColors.paper)),
+            ),
+            const SizedBox(width: 8),
+            // 深黃色字（和原本廣告按鈕同色）
+            Flexible(
+              child: Text(label,
+                  style: const TextStyle(color: Color(0xFFA2580A), fontWeight: FontWeight.w700, fontSize: 16)),
+            ),
+          ],
+        ),
+      );
+    }
     final color = onPaper ? const Color(0xFFA2580A) : NightColors.glow;
     return OutlinedButton(
       onPressed: onPressed,
@@ -88,7 +126,10 @@ class AdButton extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Flexible(child: Text(label, style: adLabelStyle)),
+          // 有底色的（時間到、大胃王收攤視窗最上面那顆）用粗體，比較顯眼
+          Flexible(
+              child:
+                  Text(label, style: fill != null ? adLabelStyle.copyWith(fontWeight: FontWeight.w700) : adLabelStyle)),
         ],
       ),
     );
@@ -108,11 +149,16 @@ class ResultDialog extends StatelessWidget {
     this.emphasizeAd = false,
     this.upgradeLabel,
     this.upgradeHint,
+    this.onShare,
   });
+
+  /// 有給的話多一個「分享成績」按鈕（按了不會關閉視窗），帶入按鈕的位置給 iPad 的分享選單用。
+  final void Function(Rect? origin)? onShare;
 
   final String title;
   final List<String> lines;
-  final String primaryLabel;
+  /// 繼續的按鈕（下一攤、再吃一輪）；null 就不顯示（每日挑戰一天只能玩一次）。
+  final String? primaryLabel;
   final String leaveLabel;
   final String? adLabel;
   final int? stars;
@@ -174,44 +220,73 @@ class ResultDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: NightColors.ink, fontSize: 24, fontWeight: FontWeight.w800),
-            ),
-            if (stars != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${'★' * stars!}${'☆' * (3 - stars!)}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFD9A21B), fontSize: 30, letterSpacing: 6),
-              ),
-            ],
-            const SizedBox(height: 10),
-            for (final line in lines)
-              CoinText(line, textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
-            if (upgrade && upgradeHint != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                key: const ValueKey('upgrade_hint'),
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                decoration: BoxDecoration(
-                  color: adFill.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            // 成績、成就、建議放在可以捲動的區域；小螢幕內容太多時捲動，下面的按鈕永遠看得到、點得到
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('💡', style: TextStyle(fontSize: 16)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CoinText(upgradeHint!,
-                          style: const TextStyle(color: NightColors.ink, fontSize: 13, height: 1.5)),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: NightColors.ink, fontSize: 24, fontWeight: FontWeight.w800),
                     ),
+                    if (stars != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '${'★' * stars!}${'☆' * (3 - stars!)}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Color(0xFFD9A21B), fontSize: 30, letterSpacing: 6),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    for (final line in lines)
+                      CoinText(line,
+                          textAlign: TextAlign.center, style: const TextStyle(color: NightColors.ink, height: 1.6)),
+                    if (upgrade && upgradeHint != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        key: const ValueKey('upgrade_hint'),
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: adFill.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('💡', style: TextStyle(fontSize: 16)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: CoinText(upgradeHint!,
+                                  style: const TextStyle(color: NightColors.ink, fontSize: 13, height: 1.5)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (onShare != null) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: Builder(
+                          builder: (buttonContext) => TextButton.icon(
+                            key: const ValueKey('dialog_share'),
+                            onPressed: () {
+                              final box = buttonContext.findRenderObject() as RenderBox?;
+                              onShare!(box == null ? null : box.localToGlobal(Offset.zero) & box.size);
+                            },
+                            icon: const Icon(Icons.ios_share_rounded, size: 18, color: Color(0xFFA2580A)),
+                            label: const Text('分享成績',
+                                style: TextStyle(color: Color(0xFFA2580A), fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ],
+            ),
             const SizedBox(height: 16),
             if (adFirst) ...[
               AdButton(
@@ -227,17 +302,22 @@ class ResultDialog extends StatelessWidget {
                 _upgradeButton(context),
                 const SizedBox(height: 10),
               ],
-              _outlined(null, primaryLabel, () => Navigator.of(context).pop(ResultChoice.primary)),
-              const SizedBox(height: 10),
+              if (primaryLabel != null) ...[
+                _outlined(null, primaryLabel!, () => Navigator.of(context).pop(ResultChoice.primary)),
+                const SizedBox(height: 10),
+              ],
               _outlined(
                   const ValueKey('dialog_leave'), leaveLabel, () => Navigator.of(context).pop(ResultChoice.leave)),
               const SizedBox(height: 8),
             ] else ...[
+              // 有廣告時（過關的金幣 ×2）看廣告是黃色實心的主要按鈕，繼續的按鈕改成深黃外框；
+              // 沒有廣告時繼續的按鈕是黃色實心
               if (adLabel != null) ...[
                 AdButton(
                   key: const ValueKey('dialog_ad'),
                   label: adLabel!,
                   onPaper: true,
+                  prominent: true,
                   onPressed: () => Navigator.of(context).pop(ResultChoice.watchAd),
                 ),
                 const SizedBox(height: 10),
@@ -246,22 +326,51 @@ class ResultDialog extends StatelessWidget {
                 _upgradeButton(context),
                 const SizedBox(height: 10),
               ],
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(ResultChoice.primary),
-                style: FilledButton.styleFrom(
-                  backgroundColor: NightColors.glow,
-                  foregroundColor: NightColors.ink,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              if (primaryLabel == null)
+                // 沒有繼續的按鈕時，回到首頁就是主要按鈕
+                FilledButton(
+                  key: const ValueKey('dialog_leave'),
+                  onPressed: () => Navigator.of(context).pop(ResultChoice.leave),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: NightColors.glow,
+                    foregroundColor: NightColors.ink,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text(leaveLabel, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                )
+              else if (adLabel != null)
+                OutlinedButton(
+                  key: const ValueKey('dialog_primary'),
+                  onPressed: () => Navigator.of(context).pop(ResultChoice.primary),
+                  style: OutlinedButton.styleFrom(
+                    // 深黃外框、深色字
+                    foregroundColor: NightColors.ink,
+                    side: const BorderSide(color: Color(0xFFA2580A), width: 1.5),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text(primaryLabel!, style: AdButton.adLabelStyle),
+                )
+              else
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(ResultChoice.primary),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: NightColors.glow,
+                    foregroundColor: NightColors.ink,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text(primaryLabel!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                 ),
-                child: Text(primaryLabel, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                key: const ValueKey('dialog_leave'),
-                onPressed: () => Navigator.of(context).pop(ResultChoice.leave),
-                child: Text(leaveLabel, style: const TextStyle(color: NightColors.ink)),
-              ),
+              if (primaryLabel != null) ...[
+                const SizedBox(height: 4),
+                TextButton(
+                  key: const ValueKey('dialog_leave'),
+                  onPressed: () => Navigator.of(context).pop(ResultChoice.leave),
+                  child: Text(leaveLabel, style: const TextStyle(color: NightColors.ink)),
+                ),
+              ],
             ],
           ],
         ),

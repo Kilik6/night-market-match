@@ -12,6 +12,19 @@ import '../widgets/night_scaffold.dart';
 class AchievementsScreen extends StatefulWidget {
   const AchievementsScreen({super.key, required this.store, required this.sounds});
 
+  /// 顯示順序：可以領取的置頂，接著是還沒達成的，已經領過的放最下面；同一類維持原本的順序。
+  static List<Achievement> ordered(ProgressStore store) {
+    int rank(Achievement a) => store.isClaimed(a) ? 2 : (store.isAchieved(a) ? 0 : 1);
+    final list = [...achievements];
+    // List.sort 不保證穩定，用原本的位置當第二排序依據
+    final index = {for (var i = 0; i < achievements.length; i++) achievements[i].id: i};
+    list.sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : index[a.id]!.compareTo(index[b.id]!);
+    });
+    return list;
+  }
+
   final ProgressStore store;
   final SoundService sounds;
 
@@ -35,15 +48,16 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
   @override
   Widget build(BuildContext context) {
     final done = achievements.where(_store.isClaimed).length;
+    final list = AchievementsScreen.ordered(_store);
     return NightScaffold(
       title: '成就 $done / ${achievements.length}',
       actions: [Padding(padding: const EdgeInsets.only(right: 16), child: Center(child: CoinBadge(coins: _store.coins)))],
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        itemCount: achievements.length,
+        itemCount: list.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
-          final a = achievements[i];
+          final a = list[i];
           final achieved = _store.isAchieved(a);
           final claimed = _store.isClaimed(a);
           final progress = _store.metricValue(a.metric).clamp(0, a.target);

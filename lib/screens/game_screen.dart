@@ -426,7 +426,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _showWinDialog() async {
-    final earned = _game.coinsEarned;
+    // 重玩同一攤只有破紀錄才發金幣，而且只拿比之前多出來的分數換（第一次過關之前的最高分是 0，就是全額）
+    final previousBest = await _store.recordScore(_levelIndex, _game.score);
+    final gained = max(0, _game.score - previousBest);
+    final earned = _game.coinsFor(gained);
     final hasNext = _levelIndex + 1 < widget.levelList.length;
     final isRecord = await _store.recordStars(_levelIndex, _game.stars);
     if (hasNext) await _store.unlockUpTo(_levelIndex + 2);
@@ -442,12 +445,17 @@ class _GameScreenState extends State<GameScreen> {
         stars: _game.stars,
         lines: [
           '剩餘 ${_game.timeLeft} 秒，時間獎勵 +${_game.timeBonus}',
-          '總分 ${_game.score}，獲得 🪙 $earned',
+          if (previousBest == 0)
+            '總分 ${_game.score}，獲得 🪙 $earned'
+          else if (gained > 0)
+            '新紀錄！總分 ${_game.score}（比之前多 $gained 分），獲得 🪙 $earned'
+          else
+            '總分 ${_game.score}，沒有破紀錄（最高 $previousBest 分），這次沒有金幣',
           if (isRecord && _game.stars > 1) '刷新這一攤的最佳紀錄！',
           if (!hasNext) '恭喜逛完所有夜市！',
           for (final a in newAchievements) '🏆 成就達成：${a.name}',
         ],
-        adLabel: '看廣告，金幣 ×2',
+        adLabel: earned > 0 ? '看廣告，金幣 ×2' : null,
         primaryLabel: hasNext ? '前往下一攤：${widget.levelList[_levelIndex + 1].name}' : '再玩一次',
         leaveLabel: '回到夜市列表',
       ),
@@ -487,6 +495,7 @@ class _GameScreenState extends State<GameScreen> {
         sounds: _sounds,
         purchases: widget.purchases ?? DevPurchaseService(),
         initialTab: ShopScreen.gearTab,
+        ads: widget.ads,
       ),
     ));
   }

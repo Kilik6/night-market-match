@@ -5,7 +5,11 @@ import 'coin.dart';
 
 /// 所有畫面共用的夜空背景：深色底加上方暖色燈光暈染。
 class NightScaffold extends StatelessWidget {
-  const NightScaffold({super.key, required this.child, this.title, this.actions});
+  const NightScaffold({super.key, required this.child, this.title, this.actions, this.glow = defaultGlow});
+
+  /// 上方暈染的顏色（每日挑戰用月光的藍色）。
+  final Color glow;
+  static const defaultGlow = Color(0xFFFFB547);
 
   final Widget child;
 
@@ -27,11 +31,11 @@ class NightScaffold extends StatelessWidget {
             ),
       extendBodyBehindAppBar: true,
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
             center: Alignment.topCenter,
             radius: 1.0,
-            colors: [Color(0x29FFB547), Color(0x00FFB547)],
+            colors: [glow.withValues(alpha: 0.16), glow.withValues(alpha: 0)],
           ),
         ),
         child: SafeArea(child: child),
