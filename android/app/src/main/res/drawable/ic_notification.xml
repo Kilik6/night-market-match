@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知小圖示：白色燈籠剪影（Android 狀態列只顯示形狀，顏色由系統決定） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 掛勾 -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M11.25,0.8h1.5v2.4h-1.5z" />
+    <!-- 上蓋 -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M8.2,3h7.6a0.8,0.8 0 0 1 0.8,0.8v1a0.8,0.8 0 0 1 -0.8,0.8h-7.6a0.8,0.8 0 0 1 -0.8,-0.8v-1a0.8,0.8 0 0 1 0.8,-0.8z" />
+    <!-- 燈籠身，挖出兩條弧形的骨架線 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,5.4C17.6,5.4 20.4,8.3 20.4,11.6C20.4,14.9 17.6,17.8 12,17.8C6.4,17.8 3.6,14.9 3.6,11.6C3.6,8.3 6.4,5.4 12,5.4Z M9.2,7C7.5,8.9 7.5,14.3 9.2,16.2L10.3,16.2C8.8,14.3 8.8,8.9 10.3,7Z M14.8,7C16.5,8.9 16.5,14.3 14.8,16.2L13.7,16.2C15.2,14.3 15.2,8.9 13.7,7Z" />
+    <!-- 下蓋 -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M8.2,17.6h7.6a0.8,0.8 0 0 1 0.8,0.8v0.8a0.8,0.8 0 0 1 -0.8,0.8h-7.6a0.8,0.8 0 0 1 -0.8,-0.8v-0.8a0.8,0.8 0 0 1 0.8,-0.8z" />
+    <!-- 流蘇 -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M11.2,20h1.6l0.5,3.2h-2.6z" />
+</vector>

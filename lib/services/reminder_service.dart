@@ -1,3 +1,5 @@
+import 'dart:ui' show Color;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -68,11 +70,17 @@ class LocalReminderService implements ReminderService {
   bool _ready = false;
 
   static const _id = 1;
+
+  /// 白色燈籠剪影（android/app/src/main/res/drawable/ic_notification.xml）。
+  /// 狀態列只顯示形狀，用彩色的 App 圖示會變成一塊白色方塊。
+  static const _androidIcon = 'ic_notification';
   static const _details = NotificationDetails(
     android: AndroidNotificationDetails(
       'daily_reminder',
       '每日提醒',
       channelDescription: '每天提醒簽到、轉盤和月卡的獎勵',
+      icon: _androidIcon,
+      color: Color(0xFFE8432F), // 通知展開時圖示的燈籠紅
     ),
     iOS: DarwinNotificationDetails(),
   );
@@ -83,7 +91,7 @@ class LocalReminderService implements ReminderService {
       tz_data.initializeTimeZones();
       tz.setLocalLocation(tz.getLocation(await FlutterTimezone.getLocalTimezone()));
       await _plugin.initialize(const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings(_androidIcon),
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
           requestBadgePermission: false,
