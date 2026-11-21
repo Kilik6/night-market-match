@@ -65,6 +65,9 @@ enum PurchaseResult {
   /// 玩家自己取消。
   cancelled,
 
+  /// 付款處理中（例如 Android 的超商付款），完成後會自動發放。
+  pending,
+
   /// 付款失敗（網路、商店錯誤）。
   failed,
 
@@ -72,13 +75,64 @@ enum PurchaseResult {
   unavailable,
 }
 
-/// 商店付款。畫面只依賴這個介面：開發時用 [DevPurchaseService]，之後換成串接 App Store／Google Play 的版本。
+/// 商店付款。畫面只依賴這個介面：開發時用 [DevPurchaseService]，正式版用串接 App Store／Google Play 的
+/// StorePurchaseService（lib/services/store_purchase_service.dart）。
 abstract class PurchaseService {
   /// 購買商品。
   Future<PurchaseResult> buy(String productId);
 
   /// 恢復購買：回傳玩家買過的非消耗型商品 id（例如移除廣告）。無法使用時回傳 null。
   Future<Set<String>?> restore();
+
+  /// 商店回傳、依玩家所在地區顯示的價格（例如「NT$30」）；還沒載入或假商店回傳 null，畫面改顯示預設價格。
+  String? price(String productId);
+
+  /// true：付款成功時服務自己就把商品發給玩家（真的商店，付款結果可能很晚才到）；
+  /// false：由呼叫的地方在 [buy] 成功後發放（假商店）。
+  bool get deliversContent;
+}
+
+/// 商品的預設價格（商店價格還沒載入時顯示）。
+String defaultPriceLabel(String productId) {
+  final ntd = switch (productId) {
+    starterPackProductId => starterPackPriceNtd,
+    monthCardProductId => monthCardPriceNtd,
+    removeAdsProductId => removeAdsPriceNtd,
+    _ => coinPacks.firstWhere((p) => p.id == productId).priceNtd,
+  };
+  return 'NT\$$ntd';
+}
+
+/// 所有商品 id。
+final allProductIds = {
+  for (final p in coinPacks) p.id,
+  starterPackProductId,
+  monthCardProductId,
+  removeAdsProductId,
+};
+
+/// 非消耗型商品：買一次永久擁有，可以恢復購買。其他都是消耗型（可以重複買）。
+const nonConsumableProductIds = {removeAdsProductId, starterPackProductId};
+
+/// 把買到的商品發給玩家。
+Future<void> deliverPurchase(ProgressStore store, String productId) async {
+  switch (productId) {
+    case removeAdsProductId:
+      await store.setAdsRemoved(true);
+    case starterPackProductId:
+      await store.grantStarterPack();
+    case monthCardProductId:
+      await store.activateMonthCard();
+    default:
+      final pack = coinPacks.where((p) => p.id == productId).firstOrNull;
+      if (pack != null) await store.addCoins(pack.coins);
+  }
+}
+
+/// 恢復非消耗型商品（換手機時）：只拿回「移除廣告」和新手禮包的卡背，不會再發一次金幣和道具。
+Future<void> restoreNonConsumable(ProgressStore store, String productId) async {
+  if (productId == removeAdsProductId) await store.setAdsRemoved(true);
+  if (productId == starterPackProductId) await store.restoreStarterPack();
 }
 
 /// 開發測試用的假商店，不會真的扣款。
@@ -102,12 +156,23 @@ class DevPurchaseService implements PurchaseService {
 
   @override
   Future<Set<String>?> restore() async => enabled ? {..._owned} : null;
+
+  @override
+  String? price(String productId) => null;
+
+  @override
+  bool get deliversContent => false;
+}
+
+/// 付款成功、而且購買服務沒有自己發放時，由這裡發放。
+Future<void> _deliverIfNeeded(PurchaseService purchases, ProgressStore store, String productId, PurchaseResult result) async {
+  if (result == PurchaseResult.success && !purchases.deliversContent) await deliverPurchase(store, productId);
 }
 
 /// 買金幣：付款成功就把金幣加進存檔。
 Future<PurchaseResult> buyCoinPack(PurchaseService purchases, ProgressStore store, CoinPack pack) async {
   final result = await purchases.buy(pack.id);
-  if (result == PurchaseResult.success) await store.addCoins(pack.coins);
+  await _deliverIfNeeded(purchases, store, pack.id, result);
   return result;
 }
 
@@ -115,7 +180,7 @@ Future<PurchaseResult> buyCoinPack(PurchaseService purchases, ProgressStore stor
 Future<PurchaseResult?> buyMonthCard(PurchaseService purchases, ProgressStore store) async {
   if (!store.canBuyMonthCard) return null;
   final result = await purchases.buy(monthCardProductId);
-  if (result == PurchaseResult.success) await store.activateMonthCard();
+  await _deliverIfNeeded(purchases, store, monthCardProductId, result);
   return result;
 }
 
@@ -123,7 +188,7 @@ Future<PurchaseResult?> buyMonthCard(PurchaseService purchases, ProgressStore st
 Future<PurchaseResult?> buyStarterPack(PurchaseService purchases, ProgressStore store) async {
   if (store.starterPackBought) return null;
   final result = await purchases.buy(starterPackProductId);
-  if (result == PurchaseResult.success) await store.grantStarterPack();
+  await _deliverIfNeeded(purchases, store, starterPackProductId, result);
   return result;
 }
 
@@ -131,7 +196,7 @@ Future<PurchaseResult?> buyStarterPack(PurchaseService purchases, ProgressStore 
 Future<PurchaseResult> buyRemoveAds(PurchaseService purchases, ProgressStore store) async {
   if (store.adsRemoved) return PurchaseResult.success;
   final result = await purchases.buy(removeAdsProductId);
-  if (result == PurchaseResult.success) await store.setAdsRemoved(true);
+  await _deliverIfNeeded(purchases, store, removeAdsProductId, result);
   return result;
 }
 
@@ -141,12 +206,8 @@ Future<bool?> restorePurchases(PurchaseService purchases, ProgressStore store) a
   final owned = await purchases.restore();
   if (owned == null) return null;
   var restored = false;
-  if (owned.contains(removeAdsProductId)) {
-    await store.setAdsRemoved(true);
-    restored = true;
-  }
-  if (owned.contains(starterPackProductId)) {
-    await store.restoreStarterPack();
+  for (final id in owned.intersection(nonConsumableProductIds)) {
+    await restoreNonConsumable(store, id);
     restored = true;
   }
   return restored;

@@ -397,6 +397,20 @@ class ProgressStore {
     return true;
   }
 
+  // ---------- 應用程式內購買 ----------
+
+  static const _deliveredPurchasesKey = 'iap_delivered';
+
+  /// 這筆交易已經發放過了（同一筆交易可能因為 App 中途被關掉而重送，不能重複發）。
+  bool isPurchaseDelivered(String transactionId) =>
+      (_prefs.getStringList(_deliveredPurchasesKey) ?? const []).contains(transactionId);
+
+  /// 記下已經發放的交易，只保留最近 200 筆。重置遊戲進度不會清掉。
+  Future<void> markPurchaseDelivered(String transactionId) async {
+    final list = [...?_prefs.getStringList(_deliveredPurchasesKey), transactionId];
+    await _prefs.setStringList(_deliveredPurchasesKey, list.length > 200 ? list.sublist(list.length - 200) : list);
+  }
+
   // ---------- 新手禮包 ----------
 
   /// 買過新手禮包了（每個人只能買一次；重置遊戲進度也不會清掉）。

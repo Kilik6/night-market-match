@@ -91,6 +91,9 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         ),
       );
 
+  /// 商店的價格（依玩家地區），還沒載入時顯示預設的新台幣價格。
+  String _price(String productId) => widget.purchases.price(productId) ?? defaultPriceLabel(productId);
+
   /// 依購買結果顯示提示；成功時回傳 true。
   bool _report(PurchaseResult result, String successText) {
     if (!mounted) return false;
@@ -102,6 +105,8 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         return true;
       case PurchaseResult.cancelled:
         return false;
+      case PurchaseResult.pending:
+        _toast('付款處理中，完成後會自動發放');
       case PurchaseResult.failed:
         _toast('購買沒有完成，沒有扣款，請稍後再試');
       case PurchaseResult.unavailable:
@@ -187,7 +192,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(width: 8),
-          _buyButton(const ValueKey('buy_starter_pack'), 'NT\$$starterPackPriceNtd', _buying ? null : _buyStarterPack),
+          _buyButton(const ValueKey('buy_starter_pack'), _price(starterPackProductId), _buying ? null : _buyStarterPack),
         ],
       ),
     );
@@ -283,7 +288,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(width: 8),
-          _buyButton(const ValueKey('buy_month_card'), 'NT\$$monthCardPriceNtd',
+          _buyButton(const ValueKey('buy_month_card'), _price(monthCardProductId),
               _buying || !canBuy ? null : _buyMonthCard),
         ],
       ),
@@ -307,7 +312,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
     setState(() => _buying = false);
     _toast(switch (restored) {
       null => '儲值功能即將開放，敬請期待',
-      true => '已恢復「永久移除廣告」',
+      true => '已恢復你買過的項目',
       false => '沒有可以恢復的購買項目',
     });
   }
@@ -594,7 +599,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
                       key: ValueKey('remove_ads_owned'),
                       style: TextStyle(color: NightColors.jade, fontWeight: FontWeight.w700))
                   : _buyButton(
-                      const ValueKey('buy_remove_ads'), 'NT\$$removeAdsPriceNtd', _buying ? null : _buyRemoveAds),
+                      const ValueKey('buy_remove_ads'), _price(removeAdsProductId), _buying ? null : _buyRemoveAds),
             ],
           ),
         ),
@@ -609,7 +614,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
             emoji: pack.emoji,
             title: pack.name,
             subtitle: '🪙 ${pack.coins}・${pack.bonus >= 0.01 ? '多送 ${(pack.bonus * 100).round()}%' : '基本方案'}',
-            action: _buyButton(ValueKey('pack_${pack.id}'), pack.priceLabel, _buying ? null : () => _buyPack(pack)),
+            action: _buyButton(ValueKey('pack_${pack.id}'), _price(pack.id), _buying ? null : () => _buyPack(pack)),
           ),
           const SizedBox(height: 10),
         ],

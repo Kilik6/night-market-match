@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
@@ -7,6 +10,7 @@ import 'services/progress_store.dart';
 import 'services/purchase_service.dart';
 import 'services/reminder_service.dart';
 import 'services/sound_service.dart';
+import 'services/store_purchase_service.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -21,8 +25,16 @@ Future<void> main() async {
   );
   // 音效在開場動畫播放時載入，動畫播完、音效也好了才進首頁
   final soundsReady = sounds.init();
-  // 儲值目前用開發測試的假商店（只有 debug 版會成功），之後換成串接 App Store／Google Play 的版本
-  final purchases = DevPurchaseService();
+  // 儲值：正式版串接 App Store／Google Play；debug 版用假商店（不會扣款），
+  // 要在 debug 版測真的商店時加 --dart-define=REAL_STORE=true
+  final PurchaseService purchases;
+  if (kReleaseMode || const bool.fromEnvironment('REAL_STORE')) {
+    final storePurchases = StorePurchaseService(store);
+    storePurchases.init(); // 先聽購買串流，才收得到上次沒處理完的付款；不等商品載入
+    purchases = storePurchases;
+  } else {
+    purchases = DevPurchaseService();
+  }
   // 每日提醒：設定時區和通知（不會跳權限詢問），有開提醒的話依今天的進度重排
   final reminders = LocalReminderService();
   reminders.init().then((_) {
@@ -66,14 +78,27 @@ class NightMarketMatchApp extends StatefulWidget {
 }
 
 class _NightMarketMatchAppState extends State<NightMarketMatchApp> with WidgetsBindingObserver {
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+  StreamSubscription<String>? _deliveredLater;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 晚到的付款（App 中途被關掉、待處理付款完成）發放後提示玩家
+    final purchases = widget.purchases;
+    if (purchases is StorePurchaseService) {
+      _deliveredLater = purchases.deliveredLater.listen((_) {
+        _messenger.currentState
+          ?..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('購買完成，商品已經發放囉！')));
+      });
+    }
   }
 
   @override
   void dispose() {
+    _deliveredLater?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -93,6 +118,7 @@ class _NightMarketMatchAppState extends State<NightMarketMatchApp> with WidgetsB
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: _messenger,
       title: '夜市翻牌',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

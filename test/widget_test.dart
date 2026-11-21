@@ -246,6 +246,12 @@ class _CancelPurchases implements PurchaseService {
 
   @override
   Future<Set<String>?> restore() async => {};
+
+  @override
+  String? price(String productId) => null;
+
+  @override
+  bool get deliversContent => false;
 }
 
 /// 假的音效服務：只記錄播了哪些音效。
@@ -2717,7 +2723,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('restore')));
       await tester.pump();
       expect(store.adsRemoved, isTrue);
-      expect(find.text('已恢復「永久移除廣告」'), findsOneWidget);
+      expect(find.text('已恢復你買過的項目'), findsOneWidget);
 
       // 設定頁
       await setUpStore(tester, const {});

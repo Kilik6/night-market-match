@@ -152,7 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ..showSnackBar(SnackBar(
         content: Text(switch (restored) {
           null => '儲值功能即將開放，敬請期待',
-          true => '已恢復「永久移除廣告」',
+          true => '已恢復你買過的項目',
           false => '沒有可以恢復的購買項目',
         }),
       ));
