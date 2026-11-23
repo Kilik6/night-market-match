@@ -195,8 +195,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
           child: Text(title, style: const TextStyle(color: NightColors.mist, fontSize: 13, letterSpacing: 1.5)),
         );
-    Widget group(List<Widget> children) => Container(
-          decoration: BoxDecoration(color: NightColors.stall, borderRadius: BorderRadius.circular(12)),
+    // 用 Material 當底色（不是 Container），列表項目按下去的水波紋才看得到
+    Widget group(List<Widget> children) => Material(
+          color: NightColors.stall,
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
           child: Column(children: children),
         );
     const labelStyle = TextStyle(color: NightColors.paper, fontSize: 16);
@@ -213,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               secondary: const Icon(Icons.music_note_rounded, color: NightColors.glow),
               title: const Text('背景音樂', style: labelStyle),
               value: _sounds.musicOn,
-              activeColor: NightColors.glow,
+              activeThumbColor: NightColors.glow,
               onChanged: _setMusic,
             ),
             _volumeSlider(
@@ -228,7 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               secondary: const Icon(Icons.volume_up_rounded, color: NightColors.glow),
               title: const Text('音效', style: labelStyle),
               value: !_sounds.muted,
-              activeColor: NightColors.glow,
+              activeThumbColor: NightColors.glow,
               onChanged: _setSfx,
             ),
             _volumeSlider(
@@ -249,7 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: const Text('晚上 8 點提醒簽到、轉盤和月卡，一天最多一則',
                     style: TextStyle(color: NightColors.mist, fontSize: 13)),
                 value: _store.reminderOn,
-                activeColor: NightColors.glow,
+                activeThumbColor: NightColors.glow,
                 onChanged: _setReminder,
               ),
             ]),

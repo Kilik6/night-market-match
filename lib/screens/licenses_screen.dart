@@ -52,8 +52,10 @@ class _LicensesScreenState extends State<LicensesScreen> {
                   style: TextStyle(color: NightColors.mist, fontSize: 14, height: 1.5),
                 ),
               ),
-              Container(
-                decoration: BoxDecoration(color: NightColors.stall, borderRadius: BorderRadius.circular(12)),
+              Material(
+                color: NightColors.stall,
+                borderRadius: BorderRadius.circular(12),
+                clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     for (final MapEntry(key: name, value: texts) in licenses.entries)

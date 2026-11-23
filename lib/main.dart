@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/splash_screen.dart';
@@ -15,6 +16,8 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 遊戲只有直式版面，手機橫放也不轉（iOS 另外在 Info.plist 只開直式）
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final store = await ProgressStore.load();
   final ads = AdMobService();
   final sounds = AudioSoundService(

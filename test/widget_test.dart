@@ -2933,7 +2933,7 @@ void main() {
     testWidgets('每日任務可以看廣告領雙倍', (tester) async {
       await pumpDaily(tester, saved: {
         'daily_date': today(),
-        for (final t in dailyTaskPool) 'daily_p_${t.id}': 99,
+        for (final t in dailyTaskPool) 'daily_p_${t.id}': t.target, // 每個任務剛好完成（目標最高 100，用 99 的話抽到「配對 100 組」那天會失敗）
       });
       final task = store.todayTasks.first;
       await tester.scrollUntilVisible(find.byKey(ValueKey('daily_double_${task.id}')), 200);
@@ -2947,7 +2947,7 @@ void main() {
     testWidgets('全部完成寶箱：5 個任務都領完才能開，送金幣和招財貓；看廣告金幣 ×2；一天一次', (tester) async {
       await pumpDaily(tester, saved: {
         'daily_date': today(),
-        for (final t in dailyTaskPool) 'daily_p_${t.id}': 99,
+        for (final t in dailyTaskPool) 'daily_p_${t.id}': t.target, // 每個任務剛好完成（目標最高 100，用 99 的話抽到「配對 100 組」那天會失敗）
       });
       final tasks = store.todayTasks;
       await tester.scrollUntilVisible(find.byKey(const ValueKey('daily_chest')), 200);
