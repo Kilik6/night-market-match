@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
+import '../services/haptics.dart';
 import '../services/progress_store.dart';
 import '../services/purchase_service.dart';
 import '../services/reminder_service.dart';
@@ -9,7 +10,7 @@ import '../theme.dart';
 import '../widgets/night_scaffold.dart';
 import 'licenses_screen.dart';
 
-/// 設定：背景音樂、音效（開關和音量）、每日提醒、恢復購買、廣告隱私權（需要的地區）、重置進度、版本、開源授權。
+/// 設定：背景音樂、音效（開關和音量）、震動、每日提醒、恢復購買、廣告隱私權（需要的地區）、重置進度、版本、開源授權。
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -122,6 +123,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
+  /// 打開時震一下，讓玩家知道是什麼感覺。
+  Future<void> _setHaptics(bool on) async {
+    await _store.setHapticsOn(on);
+    vibrateOnMatch(_store, strong: false);
+    if (mounted) setState(() {});
+  }
+
   /// 打開每日提醒要先請使用者允許通知；不允許就維持關閉並提示。
   Future<void> _setReminder(bool on) async {
     final reminders = widget.reminders!;
@@ -209,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
-          section('聲音'),
+          section('聲音與震動'),
           group([
             SwitchListTile(
               key: const ValueKey('music_switch'),
@@ -240,6 +248,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               enabled: !_sounds.muted,
               onChanged: _setSfxVolume,
               onChangeEnd: _saveSfxVolume,
+            ),
+            SwitchListTile(
+              key: const ValueKey('haptics_switch'),
+              secondary: const Icon(Icons.vibration_rounded, color: NightColors.glow),
+              title: const Text('震動', style: labelStyle),
+              subtitle: const Text('配對成功時震一下', style: TextStyle(color: NightColors.mist, fontSize: 13)),
+              value: _store.hapticsOn,
+              activeThumbColor: NightColors.glow,
+              onChanged: _setHaptics,
             ),
           ]),
           if (widget.reminders != null) ...[

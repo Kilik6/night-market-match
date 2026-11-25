@@ -12,6 +12,7 @@ import '../game/items.dart';
 import '../game/matching_game.dart' show PickResult;
 import '../game/night_market_data.dart';
 import '../services/ad_service.dart';
+import '../services/haptics.dart';
 import '../services/leaderboard_service.dart';
 import '../services/share_service.dart';
 import '../services/progress_store.dart';
@@ -488,7 +489,7 @@ class EndlessScreenState extends State<EndlessScreen> {
     });
   }
 
-  /// 配對成功（翻牌或放大鏡）：特效、音效、提示、圖鑑紀錄；吃光的話放慶祝動畫再上下一波。
+  /// 配對成功（翻牌或放大鏡）：特效、音效、震動、提示、圖鑑紀錄；吃光的話放慶祝動畫再上下一波。
   void _onMatched() {
     final food = _game.lastMatched!;
     final reduceMotion = MediaQuery.of(context).disableAnimations;
@@ -504,7 +505,9 @@ class EndlessScreenState extends State<EndlessScreen> {
     if (reduceMotion) _syncScore();
     final isNew = !_store.discoveredFoods.contains(food.name);
     _store.recordMatch(food, _game.lastCombo);
-    _sounds.play(_game.lastCombo >= 3 || _game.lastFever ? Sfx.combo : Sfx.match);
+    final strong = _game.lastCombo >= 3 || _game.lastFever;
+    _sounds.play(strong ? Sfx.combo : Sfx.match);
+    vibrateOnMatch(_store, strong: strong);
     setState(() {
       final fever = _game.lastFever ? '大胃王時間 ' : '';
       final head = _game.lastCombo > 1

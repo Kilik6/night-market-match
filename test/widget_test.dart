@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:night_market_match/game/achievements.dart';
 import 'package:night_market_match/game/card_skins.dart';
@@ -1797,6 +1798,72 @@ void main() {
       expect(sounds.muted, isTrue);
     });
 
+    /// 記錄觸發過的震動。
+    List<Object?> recordHaptics(WidgetTester tester) {
+      final log = <Object?>[];
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') log.add(call.arguments);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      return log;
+    }
+
+    const medium = 'HapticFeedbackType.mediumImpact';
+    const heavy = 'HapticFeedbackType.heavyImpact';
+
+    testWidgets('震動：走透透每配對一組震一下，過關那組比較強；翻錯不震', (tester) async {
+      final haptics = recordHaptics(tester);
+      await pumpGame(tester);
+      await solveOnScreen(tester, 0);
+      expect(haptics.length, testLevels[0].pairs);
+      expect(haptics.first, testLevels[0].pairs == 1 ? heavy : medium);
+      expect(haptics.last, heavy);
+    });
+
+    testWidgets('震動：大胃王配對成功會震，翻錯不震', (tester) async {
+      final haptics = recordHaptics(tester);
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1), previewSeconds: 0),
+      ));
+      await eatEndlessPair(tester);
+      expect(haptics, [medium]);
+      final before = sounds.played.where((s) => s == Sfx.match || s == Sfx.combo).length;
+      await missEndlessPair(tester);
+      final after = sounds.played.where((s) => s == Sfx.match || s == Sfx.combo).length;
+      expect(sounds.played, contains(Sfx.miss));
+      expect(haptics.length, 1 + after - before, reason: '只有配對成功才震');
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('震動：設定可以關掉，會存檔，重置進度也保留', (tester) async {
+      final haptics = recordHaptics(tester);
+      await pumpHome(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('settings')));
+      final toggle = find.byKey(const ValueKey('haptics_switch'));
+      await tester.ensureVisible(toggle);
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(store.hapticsOn, isFalse);
+      expect(haptics, isEmpty);
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(store.hapticsOn, isTrue);
+      expect(haptics, [medium], reason: '打開時震一下');
+      await store.setHapticsOn(false);
+      await store.resetProgress();
+      expect(store.hapticsOn, isFalse);
+    });
+
+    testWidgets('震動：設定關掉後，配對不震', (tester) async {
+      final haptics = recordHaptics(tester);
+      await pumpGame(tester, saved: {'haptics_on': false});
+      await solveOnScreen(tester, 0);
+      expect(haptics, isEmpty);
+    });
+
     testWidgets('設定：重置進度要先確認，取消就不會清掉', (tester) async {
       await pumpHome(tester, saved: {'coins': 500, 'unlocked': 3});
       await tapAndSettle(tester, find.byKey(const ValueKey('settings')));
@@ -2990,6 +3057,8 @@ void main() {
 
     testWidgets('每日挑戰：今天的種子出牌，一開始就算玩過；沒有重新開始，結束只能回首頁', (tester) async {
       await setUpStore(tester, const {});
+      // 固定在連擊加倍日，分數才不會跟著當天的規則變（吃光日獎勵 ×3）
+      store = await ProgressStore.load(clock: () => DateTime(2026, 11, 22, 12));
       final board = FakeLeaderboardService();
       await tester.pumpWidget(MaterialApp(
         home: EndlessScreen(

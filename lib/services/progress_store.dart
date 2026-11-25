@@ -24,6 +24,7 @@ class ProgressStore {
   static const _adsRemovedKey = 'ads_removed';
   static const _mutedKey = 'muted';
   static const _musicOnKey = 'music_on';
+  static const _hapticsOnKey = 'haptics_on';
   static const _musicVolumeKey = 'music_volume';
   static const _monthCardEndKey = 'month_card_end';
   static const _starterPackKey = 'starter_pack';
@@ -74,6 +75,10 @@ class ProgressStore {
   /// 背景音樂開關，預設開。
   bool get musicOn => _prefs.getBool(_musicOnKey) ?? true;
   Future<void> setMusicOn(bool value) => _prefs.setBool(_musicOnKey, value);
+
+  /// 配對成功的震動開關，預設開。重置進度不會清掉。
+  bool get hapticsOn => _prefs.getBool(_hapticsOnKey) ?? true;
+  Future<void> setHapticsOn(bool value) => _prefs.setBool(_hapticsOnKey, value);
 
   /// 設定頁的音量滑桿（0～1）。沒存過時用預設值。重置進度不會清掉。
   double musicVolume(double fallback) => _prefs.getDouble(_musicVolumeKey) ?? fallback;

@@ -10,6 +10,7 @@ import '../game/items.dart';
 import '../game/matching_game.dart';
 import '../game/night_market_data.dart';
 import '../services/ad_service.dart';
+import '../services/haptics.dart';
 import '../services/progress_store.dart';
 import '../services/purchase_service.dart';
 import '../services/sound_service.dart';
@@ -305,13 +306,14 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  /// 配對成功（翻牌或放大鏡）：音效、提示、圖鑑紀錄，全部配完就過關。
+  /// 配對成功（翻牌或放大鏡）：音效、震動、提示、圖鑑紀錄，全部配完就過關。
   void _onMatched() {
     final food = _game.lastMatched!;
     _addBursts();
     final isNew = !_store.discoveredFoods.contains(food.name);
     _store.recordMatch(food, _game.lastCombo);
     _sounds.play(_game.isWon ? Sfx.win : (_game.lastCombo >= 3 ? Sfx.combo : Sfx.match));
+    vibrateOnMatch(_store, strong: _game.isWon || _game.lastCombo >= 3);
     setState(() {
       final head = _game.lastCombo > 1
           ? '${food.name}！${_game.lastCombo} 連擊 +${_game.lastPoints}'
