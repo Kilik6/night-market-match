@@ -58,7 +58,7 @@ class HowToPlayScreen extends StatelessWidget {
               '每組得分 ${EndlessGame.pointsPerMatch} × 連擊。連續配對 ${EndlessGame.feverAt} 組進入「大胃王時間」，接下來 ${EndlessGame.feverMatches} 組分數 ×${EndlessGame.feverMultiplier}，翻錯就結束。',
               '把桌上全部吃光有獎勵（第幾次吃光 × ${EndlessGame.allClearBonus} 分），下一波菜會一次上好幾組並翻開讓你記。',
               '連續翻錯 ${EndlessGame.bossHintAfterMisses} 次，老闆會偷偷亮出一組對子；提示過後要再配對 ${EndlessGame.bossHintCooldownMatches} 組才會再提示。',
-              '桌子塞滿時可以看廣告「吃胃藥」，收掉 ${EndlessGame.reviveRemovePairs * 2} 張牌繼續吃，每輪一次。',
+              '桌子塞滿時可以看廣告「喝酸梅湯」，收掉 ${EndlessGame.reviveRemovePairs * 2} 張牌繼續吃，每輪一次。',
               '金幣是分數 ÷ ${EndlessGame.scorePerCoin}。',
             ],
           ),

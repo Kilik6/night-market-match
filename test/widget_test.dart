@@ -2263,7 +2263,7 @@ void main() {
       expect(find.text('刷新最高分！（原本 0）'), findsOneWidget);
       expect(findCoinText('獲得 🪙 3'), findsOneWidget, reason: '600 分 ÷ 200');
       expect(store.endlessBest, 600, reason: '塞滿就先存最高分');
-      expect(store.coins, 0, reason: '還沒決定要不要吃胃藥，先不發金幣');
+      expect(store.coins, 0, reason: '還沒決定要不要喝酸梅湯，先不發金幣');
       expect(sounds.played, contains(Sfx.lose));
 
       await tapAndSettle(tester, find.text('再吃一輪'));
@@ -2281,13 +2281,13 @@ void main() {
       expect(store.endlessBest, 5000);
     });
 
-    testWidgets('看廣告吃胃藥：收掉 10 張繼續；廣告失敗回到結算；最後才發一次金幣', (tester) async {
+    testWidgets('看廣告喝酸梅湯：收掉 10 張繼續；廣告失敗回到結算；最後才發一次金幣', (tester) async {
       await pumpHome(tester);
       await tapAndSettle(tester, find.byKey(const ValueKey('endless')));
       await eatEndlessPair(tester);
       await fillEndlessTable(tester);
 
-      expect(find.text('看廣告吃胃藥，收掉 10 張'), findsOneWidget);
+      expect(find.text('看廣告喝酸梅湯，收掉 10 張'), findsOneWidget);
       // 廣告維持原本的深黃字外框樣式，再吃一輪、回到首頁是黃色外框
       for (final label in ['再吃一輪', '回到首頁']) {
         expect(find.ancestor(of: find.text(label), matching: find.byType(OutlinedButton)), findsOneWidget,
@@ -2309,17 +2309,17 @@ void main() {
       expect(find.text('新紀錄！吃飽收攤'), findsNothing);
       expect(textOf(tester, 'table_count'), '10/20');
       expect(tableOnScreen(tester).length, 10);
-      expect(find.text('吃了胃藥，桌上收掉 10 張，繼續吃！'), findsOneWidget);
+      expect(find.text('喝了酸梅湯，桌上收掉 10 張，繼續吃！'), findsOneWidget);
       expect(store.coins, 0);
 
       await fillEndlessTable(tester);
-      expect(find.byKey(const ValueKey('dialog_ad')), findsNothing, reason: '胃藥每輪一次');
+      expect(find.byKey(const ValueKey('dialog_ad')), findsNothing, reason: '酸梅湯每輪一次');
       await tapAndSettle(tester, find.byKey(const ValueKey('dialog_leave')));
       expect(store.coins, 3, reason: '600 分 ÷ 200，只發一次');
       expect(find.text('最高分 600'), findsOneWidget, reason: '首頁入口顯示最高分');
     });
 
-    testWidgets('結算視窗顯示新達成的成就；吃胃藥和廣告失敗都只算一輪', (tester) async {
+    testWidgets('結算視窗顯示新達成的成就；喝酸梅湯和廣告失敗都只算一輪', (tester) async {
       await pumpEndless(tester);
       await eatEndlessPair(tester);
       await fillEndlessTable(tester);
@@ -2340,7 +2340,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await eatEndlessPair(tester);
       await fillEndlessTable(tester);
-      expect(store.endlessRounds, 1, reason: '吃胃藥後再結算還是同一輪');
+      expect(store.endlessRounds, 1, reason: '喝酸梅湯後再結算還是同一輪');
       expect(store.endlessBestMatches, 2);
       expect(find.textContaining('🏆 成就達成'), findsOneWidget, reason: '開吃！還是這一輪新達成的');
 
@@ -2521,7 +2521,7 @@ void main() {
       expect(anyFaceUp(tester, 12), isFalse);
     });
 
-    testWidgets('大胃王：開局翻開倒數 2 秒；吃光後新的一波只翻開 1 秒；吃胃藥不翻，再吃一輪會重來', (tester) async {
+    testWidgets('大胃王：開局翻開倒數 2 秒；吃光後新的一波只翻開 1 秒；喝酸梅湯不翻，再吃一輪會重來', (tester) async {
       await setUpStore(tester, const {});
       await tester.pumpWidget(MaterialApp(
         home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1)),
@@ -2551,13 +2551,13 @@ void main() {
       expect(anyUp(), isFalse, reason: '1 秒後蓋回去');
       expect(find.text('開吃！'), findsOneWidget);
 
-      // 塞滿後吃胃藥：同一輪，不再翻牌
+      // 塞滿後喝酸梅湯：同一輪，不再翻牌
       await fillEndlessTable(tester);
       await tester.tap(find.byKey(const ValueKey('dialog_ad')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(hint, findsNothing);
-      expect(anyUp(), isFalse, reason: '吃胃藥是同一輪，不再翻牌');
+      expect(anyUp(), isFalse, reason: '喝酸梅湯是同一輪，不再翻牌');
 
       // 再吃一輪：重新翻牌倒數
       await fillEndlessTable(tester);
@@ -3199,7 +3199,7 @@ void main() {
       expect(skinById('moonlight').achievementOnly, isTrue);
     });
 
-    test('每日挑戰的遊戲：翻完 40 翻就結束，不能吃胃藥；規則會改連擊上限、大胃王時間、吃光獎勵、老闆提示', () {
+    test('每日挑戰的遊戲：翻完 40 翻就結束，不能喝酸梅湯；規則會改連擊上限、大胃王時間、吃光獎勵、老闆提示', () {
       // 每一翻都配對成功：桌子不會塞滿，翻到第 40 翻就結束
       final g = EndlessGame(random: Random(3), turnLimit: dailyTurnLimit);
       while (!g.isEnded) {
@@ -3214,7 +3214,7 @@ void main() {
       expect(g.turns, dailyTurnLimit);
       expect(g.turnsLeft, 0);
       expect(g.matches, dailyTurnLimit);
-      expect(g.canRevive, isFalse, reason: '翻完了不能吃胃藥');
+      expect(g.canRevive, isFalse, reason: '翻完了不能喝酸梅湯');
       expect(g.coinsEarned, greaterThan(0));
       expect(EndlessGame(random: Random(1)).turnsLeft, isNull, reason: '大胃王沒有翻數限制');
 
@@ -3382,7 +3382,7 @@ void main() {
                       '🏆 成就達成：小吃通',
                       '🏆 成就達成：吃飽飽',
                     ],
-                    adLabel: '看廣告吃胃藥，收掉 10 張',
+                    adLabel: '看廣告喝酸梅湯，收掉 10 張',
                     primaryLabel: '再吃一輪',
                     leaveLabel: '回到首頁',
                     emphasizeAd: true,
@@ -3431,7 +3431,7 @@ void main() {
       expect(find.byType(EndlessScreen), findsNothing, reason: '不能再玩');
     });
 
-    testWidgets('大胃王每玩 3 輪播一次插頁廣告；吃過胃藥的那輪、買了移除廣告都不播', (tester) async {
+    testWidgets('大胃王每玩 3 輪播一次插頁廣告；喝過酸梅湯的那輪、買了移除廣告都不播', (tester) async {
       await setUpStore(tester, const {});
       await tester.pumpWidget(MaterialApp(
         home: EndlessScreen(store: store, ads: ads, sounds: sounds, random: Random(1), previewSeconds: 0),
@@ -3441,7 +3441,7 @@ void main() {
         await tapAndSettle(tester, find.text('再吃一輪'));
         expect(ads.interstitialShown, round == 3 ? 1 : 0, reason: '第 $round 輪');
       }
-      // 第 6 輪看過吃胃藥的廣告：不播
+      // 第 6 輪看過喝酸梅湯的廣告：不播
       for (var round = 4; round <= 6; round++) {
         await fillEndlessTable(tester);
         if (round == 6) {
@@ -3452,7 +3452,7 @@ void main() {
         }
         await tapAndSettle(tester, find.text('再吃一輪'));
       }
-      expect(ads.interstitialShown, 1, reason: '吃過胃藥的那輪不播');
+      expect(ads.interstitialShown, 1, reason: '喝過酸梅湯的那輪不播');
 
       await store.setAdsRemoved(true);
       for (var round = 7; round <= 9; round++) {

@@ -51,7 +51,7 @@ const achievements = <Achievement>[
   Achievement(id: 'tour', name: '全台走透透', description: '通過全部 18 攤', metric: Metric.levelsCleared, target: 18, skinId: 'tour'),
   Achievement(id: 'god', name: '夜市之神', description: '54 顆星全部拿到', metric: Metric.totalStars, target: 54, skinId: 'god'),
   // 夜市大胃王（老闆一直上菜，20 格塞滿就結束，翻錯 3 次加一組）。目標依模擬估算：只記得 4 張牌的玩家單輪中位數約 75000 分、107 組；
-  // 記 6 張約 110000 分、135 組；記 8 張以上約 155000 分、144 組。200000 分要靠裝備、道具和吃胃藥
+  // 記 6 張約 110000 分、135 組；記 8 張以上約 155000 分、144 組。200000 分要靠裝備、道具和喝酸梅湯
   Achievement(id: 'endless_first', name: '開吃！', description: '玩完 1 輪夜市大胃王', metric: Metric.endlessRounds, target: 1, coins: 50),
   Achievement(id: 'endless_50000', name: '吃飽飽', description: '夜市大胃王單輪 50000 分', metric: Metric.endlessBest, target: 50000, coins: 100),
   Achievement(id: 'endless_100000', name: '越吃越順', description: '夜市大胃王單輪 100000 分', metric: Metric.endlessBest, target: 100000, coins: 300),

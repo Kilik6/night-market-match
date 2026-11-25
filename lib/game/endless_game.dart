@@ -9,7 +9,7 @@ import 'night_market_data.dart';
 /// - 桌子固定 [columns]×[rows] = [capacity] 格，開局先上一組並翻開讓玩家記。
 /// - 老闆一直上菜：每翻一次牌（兩張）累積 [serveRate] 組，滿一組就蓋著上桌；每吃一組，上菜就再快一點。
 /// - 每翻錯 [missesPerPenalty] 次，老闆多加一組菜。
-/// - 要上菜但桌子已經塞滿，遊戲結束（可以看廣告「吃胃藥」收掉幾組繼續，每輪一次）。
+/// - 要上菜但桌子已經塞滿，遊戲結束（可以看廣告「喝酸梅湯」收掉幾組繼續，每輪一次）。
 /// - 連續配對拿連擊；連續配對 [feverAt] 組進入「大胃王時間」，接下來 [feverMatches] 組分數 ×[feverMultiplier]。
 /// - 把桌上全部吃光拿獎勵（[allClearBonusFor]），下一波一次上好幾組並翻開讓玩家記。
 class EndlessGame {
@@ -57,7 +57,7 @@ class EndlessGame {
   /// 吃光後下一波最多一次上幾組。
   static const maxWavePairs = 4;
 
-  /// 看廣告「吃胃藥」：收掉桌上幾組牌繼續吃。
+  /// 看廣告「喝酸梅湯」：收掉桌上幾組牌繼續吃。
   static const reviveRemovePairs = 5;
 
   /// 每翻錯幾次，老闆多加一組菜（不用連續）。
@@ -178,7 +178,7 @@ class EndlessGame {
   /// 每一波上菜時翻開全部牌讓玩家記位置，這段時間不能翻牌、不能偷看。
   bool isPreviewing = false;
 
-  /// 看廣告「吃胃藥」：每局一次。
+  /// 看廣告「喝酸梅湯」：每局一次。
   bool revived = false;
 
   /// 這一局翻錯的次數。
@@ -509,7 +509,7 @@ class EndlessGame {
   /// 畫面要不要顯示這張牌的正面。
   bool isFaceUp(int index) => slots[index] != null && (isPeeking || isPreviewing || isOpen[index]);
 
-  /// 桌子塞滿之後看廣告「吃胃藥」：收掉 [reviveRemovePairs] 組，上菜進度歸零，繼續吃。
+  /// 桌子塞滿之後看廣告「喝酸梅湯」：收掉 [reviveRemovePairs] 組，上菜進度歸零，繼續吃。
   bool revive() {
     if (!canRevive) return false;
     revived = true;

@@ -201,7 +201,7 @@ class EndlessScreenState extends State<EndlessScreen> {
   /// 這一輪開始前已達成的成就，用來判斷這輪新達成了哪些。
   Set<String> _achievedAtStart = {};
 
-  /// 這一輪是否已經算進「累積玩幾輪」。廣告失敗會重開結算視窗、吃胃藥後會再結算一次，都只算一次。
+  /// 這一輪是否已經算進「累積玩幾輪」。廣告失敗會重開結算視窗、喝酸梅湯後會再結算一次，都只算一次。
   bool _roundCounted = false;
 
   /// 播廣告、問要不要離開、結算時暫停翻牌記憶的倒數。
@@ -691,7 +691,7 @@ class EndlessScreenState extends State<EndlessScreen> {
     ));
   }
 
-  /// 桌子塞滿：先存最高分（吃胃藥後分數只會更高），再問要吃胃藥、再一輪還是離開。
+  /// 桌子塞滿：先存最高分（喝酸梅湯後分數只會更高），再問要喝酸梅湯、再一輪還是離開。
   Future<void> _showEndDialog() async {
     if (widget.dailyChallenge) {
       await _store.recordDailyChallenge(_game.score);
@@ -743,10 +743,10 @@ class EndlessScreenState extends State<EndlessScreen> {
           '獲得 🪙 $coins',
           for (final a in newAchievements) '🏆 成就達成：${a.name}',
         ],
-        // 每日挑戰為了公平不能吃胃藥，改成看廣告金幣 ×2
+        // 每日挑戰為了公平不能喝酸梅湯，改成看廣告金幣 ×2
         adLabel: daily
             ? (coins > 0 && !_coinsDoubled ? '看廣告金幣 ×2' : null)
-            : (_game.canRevive ? '看廣告吃胃藥，收掉 ${EndlessGame.reviveRemovePairs * 2} 張' : null),
+            : (_game.canRevive ? '看廣告喝酸梅湯，收掉 ${EndlessGame.reviveRemovePairs * 2} 張' : null),
         // 每日挑戰一天只能玩一次，沒有再一輪
         primaryLabel: widget.dailyChallenge ? null : '再吃一輪',
         leaveLabel: '回到首頁',
@@ -778,19 +778,19 @@ class EndlessScreenState extends State<EndlessScreen> {
       final earned = await _watchRewarded();
       if (!mounted) return;
       if (earned && _game.revive()) {
-        setState(() => _message = '吃了胃藥，桌上收掉 ${EndlessGame.reviveRemovePairs * 2} 張，繼續吃！');
+        setState(() => _message = '喝了酸梅湯，桌上收掉 ${EndlessGame.reviveRemovePairs * 2} 張，繼續吃！');
       } else {
         await _showEndDialog(); // 廣告沒播成功，回到結算視窗
       }
       return;
     }
 
-    // 決定不吃胃藥了才發金幣，吃胃藥後分數還會變
+    // 決定不喝酸梅湯了才發金幣，喝酸梅湯後分數還會變
     await _store.addCoins(coins);
     if (!mounted) return;
     _sounds.play(Sfx.coin);
 
-    // 每玩 [interstitialEvery] 輪播一次插頁廣告；這一輪看過吃胃藥的廣告、或買了移除廣告就不播
+    // 每玩 [interstitialEvery] 輪播一次插頁廣告；這一輪看過喝酸梅湯的廣告、或買了移除廣告就不播
     final rounds = widget.dailyChallenge ? _store.todayCount('challenge_rounds') : _store.endlessRounds;
     if (rounds % interstitialEvery == 0 && !_game.revived && !_store.adsRemoved) {
       await _duringAd(widget.ads.showInterstitial);

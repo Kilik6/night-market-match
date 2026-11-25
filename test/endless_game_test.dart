@@ -340,8 +340,8 @@ void main() {
     });
   });
 
-  group('EndlessGame 結束、吃胃藥與道具', () {
-    test('吃胃藥：每輪一次，收掉 5 組（10 張），上菜進度歸零，繼續吃', () {
+  group('EndlessGame 結束、喝酸梅湯與道具', () {
+    test('喝酸梅湯：每輪一次，收掉 5 組（10 張），上菜進度歸零，繼續吃', () {
       final g = ready(18);
       missUntilFull(g);
       expect(g.canRevive, isTrue);

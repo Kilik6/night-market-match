@@ -230,7 +230,7 @@ class ProgressStore {
 
   /// 時間到時呼叫（續命後再次時間到也要呼叫）。記錄單輪最高分和最多組數，回傳是否刷新最高分。
   Future<bool> recordEndlessScore(int score, {int matches = 0}) async {
-    // 吃胃藥後會再呼叫一次，所以這個任務只記一次
+    // 喝酸梅湯後會再呼叫一次，所以這個任務只記一次
     if (score >= 10000 && dailyProgress('endless_score') == 0) _bumpDaily('endless_score');
     if (matches > endlessBestMatches) await _prefs.setInt(_endlessBestMatchesKey, matches);
     if (score <= endlessBest) return false;
