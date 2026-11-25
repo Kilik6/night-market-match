@@ -30,8 +30,12 @@ Future<void> main() async {
   final soundsReady = sounds.init();
   // 儲值：正式版串接 App Store／Google Play；debug 版用假商店（不會扣款），
   // 要在 debug 版測真的商店時加 --dart-define=REAL_STORE=true
+  // Android 正式版先不開放儲值（Google Play 的內購商品還沒建立），建好後用 --dart-define=ANDROID_IAP=true 打開
+  const androidIap = bool.fromEnvironment('ANDROID_IAP');
   final PurchaseService purchases;
-  if (kReleaseMode || const bool.fromEnvironment('REAL_STORE')) {
+  if (kReleaseMode && defaultTargetPlatform == TargetPlatform.android && !androidIap) {
+    purchases = const ClosedPurchaseService();
+  } else if (kReleaseMode || const bool.fromEnvironment('REAL_STORE')) {
     final storePurchases = StorePurchaseService(store);
     storePurchases.init(); // 先聽購買串流，才收得到上次沒處理完的付款；不等商品載入
     purchases = storePurchases;

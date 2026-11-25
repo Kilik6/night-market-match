@@ -12,7 +12,8 @@ import '../widgets/card_widget.dart';
 import '../widgets/coin.dart';
 import '../widgets/night_scaffold.dart';
 
-/// 夜市商店：道具、裝備、卡背、儲值四個分頁。
+/// 夜市商店：道具、裝備、卡背、儲值四個分頁。沒開放儲值的版本（[PurchaseService.open] 是 false）
+/// 最後一頁改成「領金幣」，只有看廣告領金幣；連廣告都沒有的話就沒有這一頁。
 class ShopScreen extends StatefulWidget {
   const ShopScreen({
     super.key,
@@ -63,7 +64,25 @@ class ShopScreen extends StatefulWidget {
 class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateMixin {
   ProgressStore get _store => widget.store;
 
-  late final TabController _tabs = TabController(length: 4, vsync: this, initialIndex: widget.initialTab);
+  /// 有沒有開放儲值。
+  bool get _open => widget.purchases.open;
+
+  /// 最後一頁有東西可以顯示。
+  bool get _hasTopUpTab => _open || widget.ads != null;
+
+  late final TabController _tabs = TabController(
+    length: _hasTopUpTab ? 4 : 3,
+    vsync: this,
+    initialIndex: _hasTopUpTab || widget.initialTab != ShopScreen.topUpTab ? widget.initialTab : 0,
+  );
+
+  /// 卡背列表：沒開放儲值時不顯示新手禮包的限定卡背（已經有的還是看得到）。
+  List<CardSkin> get _skins => _open
+      ? ShopScreen.sortedSkins
+      : [
+          for (final s in ShopScreen.sortedSkins)
+            if (!s.packOnly || _store.ownedSkins.contains(s.id)) s
+        ];
 
   /// 正在等商店回應，避免連點重複購買。
   bool _buying = false;
@@ -80,15 +99,17 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
       ..showSnackBar(SnackBar(content: CoinText(text), duration: const Duration(seconds: 3), action: action));
   }
 
-  /// 金幣不夠：提示還差多少，旁邊可以直接去儲值。
+  /// 金幣不夠：提示還差多少，旁邊可以直接去儲值（沒開放儲值時去看廣告領金幣）。
   void _notEnough(int price) => _toast(
         '金幣不夠，還差 🪙 ${price - _store.coins}',
-        action: SnackBarAction(
-          key: const ValueKey('go_top_up'),
-          label: '去儲值',
-          textColor: NightColors.glow,
-          onPressed: () => _tabs.animateTo(ShopScreen.topUpTab),
-        ),
+        action: _hasTopUpTab
+            ? SnackBarAction(
+                key: const ValueKey('go_top_up'),
+                label: _open ? '去儲值' : '領金幣',
+                textColor: NightColors.glow,
+                onPressed: () => _tabs.animateTo(ShopScreen.topUpTab),
+              )
+            : null,
       );
 
   /// 商店的價格（依玩家地區），還沒載入時顯示預設的新台幣價格。
@@ -385,11 +406,21 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
           labelColor: NightColors.glow,
           unselectedLabelColor: NightColors.mist,
           indicatorColor: NightColors.glow,
-          tabs: const [Tab(text: '道具'), Tab(text: '裝備'), Tab(text: '卡背'), Tab(key: ValueKey('tab_top_up'), text: '儲值')],
+          tabs: [
+            const Tab(text: '道具'),
+            const Tab(text: '裝備'),
+            const Tab(text: '卡背'),
+            if (_hasTopUpTab) Tab(key: const ValueKey('tab_top_up'), text: _open ? '儲值' : '領金幣'),
+          ],
         ),
       ),
       body: SafeArea(
-        child: TabBarView(controller: _tabs, children: [_itemsTab(), _gearTab(), _skinsTab(), _topUpTab()]),
+        child: TabBarView(controller: _tabs, children: [
+          _itemsTab(),
+          _gearTab(),
+          _skinsTab(),
+          if (_hasTopUpTab) _open ? _topUpTab() : ListView(padding: const EdgeInsets.all(16), children: [_adCoinsCard()]),
+        ]),
       ),
     );
   }
@@ -478,6 +509,7 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
   Widget _skinsTab() {
     final owned = _store.ownedSkins;
     final equipped = _store.equippedSkin;
+    final skins = _skins;
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -486,9 +518,9 @@ class _ShopScreenState extends State<ShopScreen> with SingleTickerProviderStateM
         crossAxisSpacing: 14,
         childAspectRatio: 0.62,
       ),
-      itemCount: ShopScreen.sortedSkins.length,
+      itemCount: skins.length,
       itemBuilder: (context, i) {
-        final skin = ShopScreen.sortedSkins[i];
+        final skin = skins[i];
         final isOwned = owned.contains(skin.id);
         final isEquipped = skin.id == equipped;
         final String label;

@@ -78,7 +78,7 @@ class LocalReminderService implements ReminderService {
     android: AndroidNotificationDetails(
       'daily_reminder',
       '每日提醒',
-      channelDescription: '每天提醒簽到、轉盤和月卡的獎勵',
+      channelDescription: '每天提醒還沒領的獎勵',
       icon: _androidIcon,
       color: Color(0xFFE8432F), // 通知展開時圖示的燈籠紅
     ),

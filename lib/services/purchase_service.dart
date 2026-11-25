@@ -78,6 +78,9 @@ enum PurchaseResult {
 /// 商店付款。畫面只依賴這個介面：開發時用 [DevPurchaseService]，正式版用串接 App Store／Google Play 的
 /// StorePurchaseService（lib/services/store_purchase_service.dart）。
 abstract class PurchaseService {
+  /// 這個版本有沒有開放儲值。沒有的話，畫面不顯示任何要付費的項目（金幣方案、月卡、新手禮包和它的卡背、移除廣告、恢復購買）。
+  bool get open;
+
   /// 購買商品。
   Future<PurchaseResult> buy(String productId);
 
@@ -144,6 +147,9 @@ class DevPurchaseService implements PurchaseService {
 
   final bool enabled;
 
+  @override
+  bool get open => true;
+
   /// 這次開啟 App 期間買過的非消耗型商品（假商店不會記到下次開啟）。
   final Set<String> _owned = {};
 
@@ -156,6 +162,26 @@ class DevPurchaseService implements PurchaseService {
 
   @override
   Future<Set<String>?> restore() async => enabled ? {..._owned} : null;
+
+  @override
+  String? price(String productId) => null;
+
+  @override
+  bool get deliversContent => false;
+}
+
+/// 沒有開放儲值的版本用：畫面不顯示付費項目，也不會連到商店。
+class ClosedPurchaseService implements PurchaseService {
+  const ClosedPurchaseService();
+
+  @override
+  bool get open => false;
+
+  @override
+  Future<PurchaseResult> buy(String productId) async => PurchaseResult.unavailable;
+
+  @override
+  Future<Set<String>?> restore() async => null;
 
   @override
   String? price(String productId) => null;

@@ -266,27 +266,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 key: const ValueKey('reminder_switch'),
                 secondary: const Icon(Icons.notifications_rounded, color: NightColors.glow),
                 title: const Text('每日提醒', style: labelStyle),
-                subtitle: const Text('晚上 8 點提醒簽到、轉盤和月卡，一天最多一則',
-                    style: TextStyle(color: NightColors.mist, fontSize: 13)),
+                subtitle: Text('晚上 8 點提醒簽到${widget.purchases.open ? '、轉盤和月卡' : '和轉盤'}，一天最多一則',
+                    style: const TextStyle(color: NightColors.mist, fontSize: 13)),
                 value: _store.reminderOn,
                 activeThumbColor: NightColors.glow,
                 onChanged: _setReminder,
               ),
             ]),
           ],
-          section('購買'),
-          group([
-            ListTile(
-              key: const ValueKey('restore_purchases'),
-              leading: const Icon(Icons.restore_rounded, color: NightColors.glow),
-              title: const Text('恢復購買', style: labelStyle),
-              subtitle: Text(
-                _store.adsRemoved ? '已永久移除廣告' : '換手機後拿回「永久移除廣告」',
-                style: const TextStyle(color: NightColors.mist, fontSize: 13),
+          if (widget.purchases.open) ...[
+            section('購買'),
+            group([
+              ListTile(
+                key: const ValueKey('restore_purchases'),
+                leading: const Icon(Icons.restore_rounded, color: NightColors.glow),
+                title: const Text('恢復購買', style: labelStyle),
+                subtitle: Text(
+                  _store.adsRemoved ? '已永久移除廣告' : '換手機後拿回「永久移除廣告」',
+                  style: const TextStyle(color: NightColors.mist, fontSize: 13),
+                ),
+                onTap: _restore,
               ),
-              onTap: _restore,
-            ),
-          ]),
+            ]),
+          ],
           if (widget.adPrivacy?.privacyOptionsRequired ?? false) ...[
             section('隱私權'),
             group([

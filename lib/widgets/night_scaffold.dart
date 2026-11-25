@@ -112,11 +112,14 @@ class MenuButton extends StatelessWidget {
 
 /// 金幣數量標籤。
 class CoinBadge extends StatelessWidget {
-  const CoinBadge({super.key, required this.coins, this.onTopUp});
+  const CoinBadge({super.key, required this.coins, this.onTopUp, this.topUpLabel = '儲值金幣'});
   final int coins;
 
   /// 有給的話，顯示成金色膠囊加上發光的「＋」，點下去去儲值（首頁用）。
   final VoidCallback? onTopUp;
+
+  /// 「＋」給螢幕報讀用的說明。
+  final String topUpLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +132,7 @@ class CoinBadge extends StatelessWidget {
     if (onTopUp == null) return text;
     return Semantics(
       button: true,
-      label: '儲值金幣',
+      label: topUpLabel,
       child: Material(
         color: NightColors.stall,
         shape: StadiumBorder(side: BorderSide(color: NightColors.glow.withValues(alpha: 0.75), width: 1.5)),

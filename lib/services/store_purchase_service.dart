@@ -39,6 +39,9 @@ class StorePurchaseService implements PurchaseService {
   Stream<String> get deliveredLater => _later.stream;
 
   @override
+  bool get open => true;
+
+  @override
   bool get deliversContent => true;
 
   @override

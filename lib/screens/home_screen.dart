@@ -127,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 金幣旁的「＋」直接打開商店的儲值分頁
                 CoinBadge(
                   coins: _store.coins,
+                  topUpLabel: _purchases.open ? '儲值金幣' : '看廣告領金幣',
                   onTopUp: () => _open(ShopScreen(
                     store: _store,
                     sounds: widget.sounds,

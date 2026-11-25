@@ -243,6 +243,9 @@ class FakeReminderService implements ReminderService {
 /// 每次都回傳「玩家取消」的假商店。
 class _CancelPurchases implements PurchaseService {
   @override
+  bool get open => true;
+
+  @override
   Future<PurchaseResult> buy(String productId) async => PurchaseResult.cancelled;
 
   @override
@@ -2779,6 +2782,87 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Copyright (c) 2017 Blue Fire'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('沒開放儲值：商店只剩看廣告領金幣，看不到任何付費項目', (tester) async {
+      await setUpStore(tester, {'coins': 0});
+      await tester.pumpWidget(MaterialApp(
+        home: ShopScreen(
+            store: store,
+            sounds: sounds,
+            purchases: const ClosedPurchaseService(),
+            initialTab: ShopScreen.topUpTab,
+            ads: ads),
+      ));
+      await settle(tester);
+      expect(find.text('領金幣'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ad_coins')), findsOneWidget);
+      for (final key in ['starter_pack', 'month_card', 'remove_ads_card', 'restore', 'buy_remove_ads']) {
+        expect(find.byKey(ValueKey(key)), findsNothing, reason: key);
+      }
+      for (final text in ['儲值', '月卡', '新手禮包', '移除廣告', '恢復購買', r'NT$']) {
+        expect(find.textContaining(text), findsNothing, reason: text);
+      }
+
+      // 看廣告領金幣照常
+      await tapAndSettle(tester, find.byKey(const ValueKey('ad_coins')));
+      expect(store.coins, shopAdCoins);
+
+      // 卡背分頁沒有新手禮包限定
+      await tapAndSettle(tester, find.text('卡背'));
+      for (var i = 0; i < 8; i++) {
+        expect(find.byKey(const ValueKey('skin_$starterPackSkinId')), findsNothing);
+        expect(find.textContaining('新手禮包'), findsNothing);
+        await tester.drag(find.byType(GridView), const Offset(0, -400));
+        await tester.pump();
+      }
+
+      // 金幣不夠時引導去領金幣，不是去儲值
+      await tapAndSettle(tester, find.text('道具'));
+      await tapAndSettle(tester, find.byKey(ValueKey('buy_${ShopScreen.sortedItems.last.name}')));
+      expect(find.text('去儲值'), findsNothing);
+      expect(find.byKey(const ValueKey('go_top_up')), findsOneWidget);
+      await settle(tester); // 等前一則提示收起、這一則滑進來
+      await tapAndSettle(tester, find.byKey(const ValueKey('go_top_up')));
+      await settle(tester); // 等分頁滑過去
+      expect(find.byKey(const ValueKey('ad_coins')), findsOneWidget);
+    });
+
+    testWidgets('沒開放儲值：沒有廣告時商店只有三個分頁', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: ShopScreen(
+            store: store, sounds: sounds, purchases: const ClosedPurchaseService(), initialTab: ShopScreen.topUpTab),
+      ));
+      await settle(tester);
+      expect(find.byType(Tab), findsNWidgets(3));
+      expect(find.text('道具'), findsOneWidget);
+    });
+
+    testWidgets('沒開放儲值：首頁「＋」打開領金幣，設定沒有恢復購買', (tester) async {
+      await setUpStore(tester, const {});
+      await tester.pumpWidget(MaterialApp(
+        home: HomeScreen(
+            store: store,
+            ads: ads,
+            sounds: sounds,
+            random: Random(1),
+            previewSeconds: 0,
+            purchases: const ClosedPurchaseService()),
+      ));
+      await settle(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('top_up')));
+      expect(find.byKey(const ValueKey('ad_coins')), findsOneWidget);
+      await tester.pageBack();
+      await settle(tester);
+      await tapAndSettle(tester, find.byKey(const ValueKey('settings')));
+      expect(find.text('聲音與震動'), findsOneWidget);
+      expect(find.text('恢復購買'), findsNothing);
+      expect(find.text('購買'), findsNothing);
+      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      await tester.pump();
+      expect(find.text('恢復購買'), findsNothing);
+      expect(find.textContaining('月卡'), findsNothing);
     });
 
     testWidgets('恢復購買：商店和設定頁都能拿回移除廣告', (tester) async {
