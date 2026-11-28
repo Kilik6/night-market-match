@@ -172,6 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     '第 ${_latestLevel + 1} 攤・${latest.name}',
                     // 先到選擇夜市的列表，選好一攤才開始
                     () => _open(LevelSelectScreen(store: _store, sounds: widget.sounds, gameBuilder: _game)),
+                    green: true,
                   ),
                 ],
               ),
@@ -219,76 +220,70 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 半寬的模式按鈕：圖示、名稱和一行小字；dot 表示今天還沒玩。
+  /// 半寬的模式按鈕：圖示、名稱和一行小字；dot 表示今天還沒玩。green 用綠色，其他是藍色。
   Widget _halfMode(String key, IconData icon, String label, String subtitle, VoidCallback onTap,
-      {bool dot = false, bool dim = false, String? badge}) {
+      {bool dot = false, bool dim = false, String? badge, bool green = false}) {
     return Expanded(
       child: Opacity(
         opacity: dim ? 0.55 : 1,
-        child: Material(
-          color: NightColors.stall,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: NightColors.paper.withValues(alpha: 0.15)),
-          ),
-          child: InkWell(
-            key: ValueKey(key),
-            borderRadius: BorderRadius.circular(12),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-              child: Row(
-                children: [
-                  Icon(icon, size: 24, color: NightColors.glow),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
+        child: ChunkyButton(
+          key: ValueKey(key),
+          face: green ? ChunkyColors.greenFace : ChunkyColors.blueFace,
+          edge: green ? ChunkyColors.greenEdge : ChunkyColors.blueEdge,
+          onTap: onTap,
+          padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+          child: Row(
+            children: [
+              Icon(icon, size: 24, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: NightColors.paper, fontSize: 16, fontWeight: FontWeight.w700)),
-                            ),
-                            if (badge != null) ...[
-                              const SizedBox(width: 4),
-                              Text(badge,
-                                  key: ValueKey('${key}_badge'),
-                                  style: const TextStyle(
-                                      color: NightColors.glow, fontSize: 12, fontWeight: FontWeight.w800)),
-                            ],
-                            if (dot) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                key: ValueKey('${key}_dot'),
-                                width: 9,
-                                height: 9,
-                                decoration: const BoxDecoration(color: NightColors.lantern, shape: BoxShape.circle),
-                              ),
-                            ],
-                          ],
+                        Flexible(
+                          child: Text(label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
                         ),
-                        const SizedBox(height: 2),
-                        Text(subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: NightColors.mist, fontSize: 12)),
+                        if (badge != null) ...[
+                          const SizedBox(width: 4),
+                          Text(badge,
+                              key: ValueKey('${key}_badge'),
+                              style: const TextStyle(
+                                  color: ChunkyColors.tileIcon, fontSize: 12, fontWeight: FontWeight.w900)),
+                        ],
+                        if (dot) ...[
+                          const SizedBox(width: 6),
+                          _redDot('${key}_dot', 10),
+                        ],
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12)),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
+
+  /// 提醒用的紅點。
+  Widget _redDot(String key, double size) => Container(
+        key: ValueKey(key),
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(color: NightColors.lantern, shape: BoxShape.circle),
+      );
 
   /// 今天的每日挑戰已經玩過了。
   void _dailyDone() {
@@ -303,45 +298,30 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 首頁的小方塊按鈕；dot 表示有獎勵可以領。
   Widget _tile(String key, IconData icon, String label, VoidCallback onTap, {bool dot = false}) {
     return Expanded(
-      child: Material(
-        color: NightColors.stall,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          key: ValueKey(key),
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
+      child: ChunkyButton(
+        key: ValueKey(key),
+        face: ChunkyColors.tileFace,
+        edge: ChunkyColors.tileEdge,
+        onTap: onTap,
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 26, color: NightColors.glow),
-                    const SizedBox(height: 6),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(label,
-                          style: const TextStyle(color: NightColors.paper, fontSize: 14, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
+                Icon(icon, size: 26, color: ChunkyColors.tileIcon),
+                const SizedBox(height: 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(label,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
                 ),
-                if (dot)
-                  Positioned(
-                    top: -4,
-                    right: 22,
-                    child: Container(
-                      key: ValueKey('${key}_dot'),
-                      width: 10,
-                      height: 10,
-                      decoration: const BoxDecoration(color: NightColors.lantern, shape: BoxShape.circle),
-                    ),
-                  ),
               ],
             ),
-          ),
+            if (dot) Positioned(top: -4, right: 22, child: _redDot('${key}_dot', 11)),
+          ],
         ),
       ),
     );

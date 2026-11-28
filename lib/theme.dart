@@ -12,3 +12,17 @@ abstract final class NightColors {
   static const jade = Color(0xFF3FBF8F); // 配對成功
   static const matched = Color(0xFFDFF3E9);
 }
+
+/// 首頁立體按鈕的配色：face 是按鈕面，edge 是底下的厚邊。
+abstract final class ChunkyColors {
+  static const goldFace = Color(0xFFFFC21A);
+  static const goldEdge = Color(0xFFC77800);
+  static const goldInk = Color(0xFF5A2D00);
+  static const blueFace = Color(0xFF5B8CFF);
+  static const blueEdge = Color(0xFF2F56C9);
+  static const greenFace = Color(0xFF3CCF8E);
+  static const greenEdge = Color(0xFF1F9460);
+  static const tileFace = Color(0xFF3A3470);
+  static const tileEdge = Color(0xFF221E4D);
+  static const tileIcon = Color(0xFFFFD23F);
+}
